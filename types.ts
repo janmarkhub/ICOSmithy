@@ -43,7 +43,7 @@ export interface BatchEffects {
   outlineWidth: number;
   outlineColor: string;
   outlineOpacity: number;
-  outlineStyle: 'solid' | 'dotted' | 'wavy';
+  outlineStyle: 'solid' | 'dotted' | 'wavy' | 'pixelated';
   outlineNoise: number;
   waveAmplitude: number;
   waveFrequency: number;
@@ -95,7 +95,7 @@ export interface BatchEffects {
   longShadowOpacity: number;
   glassBlur: number;
   glassOpacity: number;
-  finishType: string;
+  finishType: 'none';
   finishOpacity: number;
   removeBackground: boolean;
   normalizeInputs: boolean;

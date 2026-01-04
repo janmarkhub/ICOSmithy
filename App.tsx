@@ -8,6 +8,7 @@ import { EffectsPanel } from './components/EffectsPanel';
 import { StickerClipboard } from './components/StickerClipboard';
 import { Desktop } from './components/Desktop';
 import { Cauldron } from './components/Cauldron';
+import { GridSlicer } from './components/GridSlicer';
 import { FloatingHelp } from './components/FloatingHelp';
 import { ControlMatrix } from './components/ControlMatrix';
 import { PaletteForge } from './components/PaletteForge';
@@ -17,7 +18,7 @@ import { parseIcoAndGetLargestImage } from './utils/icoParser';
 import { upscaleAndEditImage, DEFAULT_EFFECTS, calculateFidelity, removeBgAndCenter } from './utils/imageProcessor';
 import { wrapPngInIco } from './utils/icoEncoder';
 import { generateIconImage, getPersonProfile, generatePackPrompts, generateIconGrid } from './utils/aiVision';
-import { Hammer, Wand2, Monitor, AlertTriangle, Coffee, Sun, Moon, Sparkles } from 'lucide-react';
+import { Hammer, Wand2, Monitor, AlertTriangle, Coffee, Sun, Moon, Sparkles, Scissors } from 'lucide-react';
 
 declare var JSZip: any;
 declare var saveAs: any;
@@ -34,7 +35,7 @@ interface FileSource {
 
 const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [mode, setMode] = useState<'upscale' | 'test' | 'cauldron'>('upscale');
+  const [mode, setMode] = useState<'upscale' | 'test' | 'cauldron' | 'slicer'>('upscale');
   const [files, setFiles] = useState<ProcessedFile[]>([]);
   const [resolution, setResolution] = useState<Resolution>(Resolution.FHD);
   const [exportFormat, setExportFormat] = useState<ExportFormat>(ExportFormat.ICO);
@@ -105,64 +106,6 @@ const App: React.FC = () => {
     triggerGratification('ASSETS_IMPORTED');
   }, [resolution, effects, exportFormat]);
 
-  const handleTeleport = async (name: string) => {
-    setIsProcessing(true);
-    triggerGratification('WARP_INITIATED');
-    try {
-      const profile = await getPersonProfile(name);
-      if (!profile) {
-        setErrorInfo({ msg: "Teleportation Failed", fix: "Target digital footprint not found. Try a famous icon." });
-        return;
-      }
-      setCurrentPerson(profile);
-      
-      const { items, masterPrompt } = await generatePackPrompts(profile.name, profile.vibe, "Clean High Detail Professional");
-      const gridDataUrl = await generateIconGrid(masterPrompt);
-      const masterImg = new Image();
-      await new Promise(res => { masterImg.onload = res; masterImg.src = gridDataUrl; });
-      
-      const cols = 5; const cellW = masterImg.width / cols; const cellH = masterImg.height / 2;
-      const sliceCanvas = document.createElement('canvas');
-      sliceCanvas.width = 1024; sliceCanvas.height = 1024; // High res slices
-      const sctx = sliceCanvas.getContext('2d')!;
-      
-      const newAssignments: any = {};
-      const slotMap: (keyof DesktopAssignments)[] = ['recycleBinEmpty', 'recycleBinFull', 'startButtonNormal', 'myPc', 'controlPanel', 'network', 'account', 'folder', 'extra1', 'extra2'];
-
-      for (let i = 0; i < 10; i++) {
-        const r = Math.floor(i / cols); const c = i % cols;
-        sctx.clearRect(0, 0, 1024, 1024);
-        sctx.drawImage(masterImg, c * cellW, r * cellH, cellW, cellH, 128, 128, 768, 768);
-        const sliceImg = new Image();
-        sliceImg.src = sliceCanvas.toDataURL('image/png');
-        await new Promise(res => sliceImg.onload = res);
-        
-        const cleanBlob = await removeBgAndCenter(sliceImg);
-        const id = crypto.randomUUID();
-        const url = URL.createObjectURL(cleanBlob);
-        const finalImg = new Image();
-        await new Promise(res => { finalImg.onload = res; finalImg.src = url; });
-        
-        sourceCache.current.set(id, { id, image: finalImg, rawUrl: url, fidelity: 100, prompt: items[i].label, label: items[i].label });
-        
-        const fileObj: ProcessedFile = {
-          id, originalName: `${items[i].label}.png`, newName: `${items[i].label}.${exportFormat}`,
-          blob: cleanBlob, previewUrl: url, status: 'completed', width: resolution, height: resolution,
-          originalType: 'image/png', fidelityScore: 100, isAiGenerated: true
-        };
-        
-        setFiles(prev => [...prev, fileObj]);
-        newAssignments[slotMap[i]] = id;
-      }
-      setDesktopAssignments(newAssignments);
-      triggerGratification(`ARRIVED AT ${profile.name.toUpperCase()}`);
-    } catch (e) {
-      setErrorInfo({ msg: "Warp Failure", fix: "Signal lost. Check your connection or API key." });
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   const handleBulkAction = async (action: string, payload?: any) => {
     if (selectedIds.length === 0) return;
     setIsProcessing(true);
@@ -187,36 +130,6 @@ const App: React.FC = () => {
         }
         setFiles(updatedFiles);
         triggerGratification('ALPHA_FIXED');
-      } else if (action === 'reroll' || action === 'change-style' || action === 'guide-prompt') {
-        const updatedFiles = [...files];
-        for (const id of selectedIds) {
-          const fileIdx = updatedFiles.findIndex(f => f.id === id);
-          const source = sourceCache.current.get(id);
-          if (fileIdx === -1 || !source) continue;
-
-          updatedFiles[fileIdx] = { ...updatedFiles[fileIdx], status: 'processing' };
-          setFiles([...updatedFiles]);
-
-          let finalPrompt = source.prompt || source.label || "icon";
-          if (action === 'change-style') finalPrompt = `Icon representing ${source.label}. Style: ${payload}. Pro quality.`;
-          else if (action === 'guide-prompt') finalPrompt = `Icon of ${source.label}. ${payload}. High detail.`;
-
-          const newDataUrl = await generateIconImage(finalPrompt);
-          const tempImg = new Image();
-          await new Promise(r => { tempImg.onload = r; tempImg.src = newDataUrl; });
-          
-          const cleanBlob = await removeBgAndCenter(tempImg);
-          const cleanUrl = URL.createObjectURL(cleanBlob);
-          const cleanImg = new Image();
-          await new Promise(r => { cleanImg.onload = r; cleanImg.src = cleanUrl; });
-
-          sourceCache.current.set(id, { ...source, image: cleanImg, rawUrl: cleanUrl });
-          updatedFiles[fileIdx] = {
-            ...updatedFiles[fileIdx], blob: cleanBlob, previewUrl: cleanUrl, status: 'completed'
-          };
-          setFiles([...updatedFiles]);
-        }
-        triggerGratification('REFORGED_BY_AI');
       }
     } finally {
       setSelectedIds([]);
@@ -233,7 +146,6 @@ const App: React.FC = () => {
       outlineColor: colors[2] || prev.outlineColor,
       glowColor: colors[3] || prev.glowColor,
     }));
-    triggerGratification('PALETTE_APPLIED');
   }, []);
 
   const handleImportPackToSmithy = useCallback(async (pack: GeneratedPackItem[]) => {
@@ -272,7 +184,7 @@ const App: React.FC = () => {
       saveAs(content, `icosmithy_export_${Date.now()}.zip`);
       triggerGratification('BATCH_EXPORTED');
     } catch (e) {
-      setErrorInfo({ msg: "Export Error", fix: "Check if browser permits large downloads." });
+      setErrorInfo({ msg: "Export Error", fix: "Check browser permissions." });
     } finally {
       setIsProcessing(false);
     }
@@ -307,26 +219,23 @@ const App: React.FC = () => {
 
       {errorInfo && (
         <div className="fixed inset-0 z-[5000] bg-black/80 flex items-center justify-center p-6 backdrop-blur-sm">
-            <div className="retro-panel border-red-600 border-4 p-8 max-w-md animate-error-shake">
-                <div className="flex items-center gap-4 mb-4 text-red-600"><AlertTriangle size={32} /><h2 className="text-xl font-black">FORGE FAILURE</h2></div>
+            <div className="retro-panel border-red-600 border-4 p-8 max-w-md">
+                <div className="flex items-center gap-4 mb-4 text-red-600"><AlertTriangle size={32} /><h2 className="text-xl font-black uppercase">Failure</h2></div>
                 <div className="retro-inset p-4 bg-white mb-6 text-[10px] font-bold text-black">{errorInfo.fix}</div>
                 <button onClick={() => setErrorInfo(null)} className="win-btn w-full bg-red-600 text-white">DISMISS</button>
             </div>
         </div>
       )}
 
-      {/* Floating Toolbar Sidebar */}
       <div className="toolbox-container">
         {selectedIds.length > 0 && mode !== 'test' && toolboxOpen && (
-          <div className="pointer-events-auto flex flex-col gap-4 animate-in slide-in-from-left-4">
+          <div className="pointer-events-auto flex flex-col gap-4">
             <ControlMatrix selectedIds={selectedIds} onAction={handleBulkAction} visible={true} onClose={() => setToolboxOpen(false)} />
             <PaletteForge onApplyPalette={handleApplyPalette} visible={true} onClose={() => setToolboxOpen(false)} />
           </div>
         )}
         {!toolboxOpen && selectedIds.length > 0 && (
-          <button onClick={() => setToolboxOpen(true)} className="win-btn bg-indigo-600 text-white p-2 pointer-events-auto shadow-xl">
-             <Hammer size={16} />
-          </button>
+          <button onClick={() => setToolboxOpen(true)} className="win-btn bg-indigo-600 text-white p-2 pointer-events-auto"><Hammer size={16} /></button>
         )}
       </div>
 
@@ -334,7 +243,6 @@ const App: React.FC = () => {
         <div className="flex justify-between items-center bg-black/10 p-4 rounded-lg">
             <Header />
             <div className="flex gap-2">
-              {selectedIds.length > 0 && <button onClick={() => setSelectedIds([])} className="win-btn bg-red-700 text-white">CLEAR SELECTION ({selectedIds.length})</button>}
               <button onClick={() => setIsDarkMode(!isDarkMode)} className="win-btn p-2">{isDarkMode ? <Sun size={18} /> : <Moon size={18} />}</button>
             </div>
         </div>
@@ -343,9 +251,10 @@ const App: React.FC = () => {
             {[
               { id: 'upscale', label: 'THE SMITHY' },
               { id: 'cauldron', label: 'THE CAULDRON' },
-              { id: 'test', label: 'FORGE PREVIEW' }
+              { id: 'slicer', label: 'GRID SLICER' },
+              { id: 'test', label: 'PREVIEW' }
             ].map(m => (
-                <button key={m.id} onClick={() => { setMode(m.id as any); setToolboxOpen(true); }} className={`win-btn flex-1 py-4 tracking-[0.2em] font-black ${mode === m.id ? 'bg-indigo-600 text-white shadow-none' : 'opacity-60'}`}>
+                <button key={m.id} onClick={() => setMode(m.id as any)} className={`win-btn flex-1 py-4 tracking-[0.2em] font-black ${mode === m.id ? 'bg-indigo-600 text-white shadow-none' : 'opacity-60'}`}>
                     {m.label}
                 </button>
             ))}
@@ -353,25 +262,16 @@ const App: React.FC = () => {
 
         <section className="min-h-[600px] w-full">
             {mode === 'cauldron' ? (
-                <Cauldron onPackGenerated={() => triggerGratification('PACK_GENERATED')} onImportToSmithy={handleImportPackToSmithy} onError={(msg, fix) => setErrorInfo({msg, fix})} />
+                <Cauldron onPackGenerated={() => triggerGratification('PACK_GENERATED')} onImportToSmithy={handleImportPackToSmithy} onOpenSlicerWithImage={(img) => setMode('slicer')} onError={(msg, fix) => setErrorInfo({msg, fix})} />
+            ) : mode === 'slicer' ? (
+                <GridSlicer onImportToSmithy={handleImportPackToSmithy} onError={(msg, fix) => setErrorInfo({msg, fix})} />
             ) : mode === 'test' ? (
-                <Desktop 
-                  files={files} 
-                  assignments={desktopAssignments} 
-                  onAssign={(s, id) => setDesktopAssignments(prev => ({ ...prev, [s]: id }))} 
-                  onTeleport={handleTeleport}
-                  currentPerson={currentPerson}
-                  isProcessing={isProcessing}
-                />
+                <Desktop files={files} assignments={desktopAssignments} onAssign={(s, id) => setDesktopAssignments(prev => ({ ...prev, [s]: id }))} onTeleport={() => Promise.resolve()} currentPerson={null} isProcessing={false} />
             ) : (
-                <div className="space-y-6 animate-in fade-in duration-300">
+                <div className="space-y-6">
                     <EffectsPanel effects={effects} setEffects={setEffects} disabled={isProcessing} onUndo={()=>{}} canUndo={false} onError={(msg, fix) => setErrorInfo({msg, fix})} />
                     <Controls resolution={resolution} setResolution={setResolution} exportFormat={exportFormat} setExportFormat={setExportFormat} onDownload={handleDownloadZip} onReset={() => setFiles([])} isProcessing={isProcessing} canDownload={files.length > 0} />
                     <DropZone onFilesSelected={handleFilesSelected} />
-                    <div className="flex justify-between items-center border-b border-white/10 pb-2">
-                        <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">STASHED_INVENTORY</h3>
-                        <button onClick={() => setShowComparison(!showComparison)} className="win-btn text-[8px]">{showComparison ? "NORMAL_VIEW" : "COMPARISON_VIEW"}</button>
-                    </div>
                     <Gallery files={files} comparisonMode={showComparison} sources={sourceCache.current} selectedIds={selectedIds} onToggleSelect={handleToggleSelect} />
                 </div>
             )}
@@ -379,7 +279,6 @@ const App: React.FC = () => {
       </div>
 
       <StickerClipboard stickers={effects.customStickers} processedIcons={files.filter(f => f.status === 'completed')} onAddSticker={(u, i) => setEffects(prev => ({ ...prev, customStickers: [...prev.customStickers, { id: crypto.randomUUID(), url: u, x: 50, y: 50, scale: 30, rotation: 0, texture: 'none' }] }))} onRemoveSticker={id => setEffects(prev => ({ ...prev, customStickers: prev.customStickers.filter(s => s.id !== id) }))} onBatchApply={()=>{}} onGenerate={()=>{}} onApplyTexture={(id, tex) => setEffects(prev => ({ ...prev, customStickers: prev.customStickers.map(s => s.id === id ? { ...s, texture: tex } : s) }))} />
-      <FloatingHelp onNav={p => setMode(p)} />
     </div>
   );
 };

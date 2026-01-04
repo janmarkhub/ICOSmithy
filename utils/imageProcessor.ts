@@ -9,7 +9,7 @@ export const DEFAULT_EFFECTS: BatchEffects = {
   outlineNoise: 0,
   waveAmplitude: 5,
   waveFrequency: 10,
-  dashPattern: [10, 5],
+  dashPattern: [10, 10],
   glowBlur: 0,
   glowColor: '#4f46e5',
   glowOpacity: 0.5,
@@ -82,6 +82,11 @@ export function calculateFidelity(img: HTMLImageElement): number {
     return Math.min(100, Math.sqrt(area) / 1024 * 100);
 }
 
+/**
+ * Aggressive Alpha Scrubbing.
+ * Sampler iterates entire image to find most common background "island" 
+ * then flood-replaces or color-keys based on distance.
+ */
 export async function removeBgAndCenter(img: HTMLImageElement): Promise<Blob> {
     const canvas = document.createElement('canvas');
     canvas.width = img.width;
@@ -91,8 +96,27 @@ export async function removeBgAndCenter(img: HTMLImageElement): Promise<Blob> {
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
 
-    // Threshold for "near white". AI generated white is often #FEFEFE or similar.
-    const t = 248; 
+    // Sample several points along the edges to find the most likely background color
+    const samples: { r: number, g: number, b: number }[] = [];
+    const step = 4;
+    for (let x = 0; x < canvas.width; x += step) {
+        let i = x * 4;
+        samples.push({ r: data[i], g: data[i+1], b: data[i+2] });
+        i = ((canvas.height - 1) * canvas.width + x) * 4;
+        samples.push({ r: data[i], g: data[i+1], b: data[i+2] });
+    }
+    for (let y = 0; y < canvas.height; y += step) {
+        let i = (y * canvas.width) * 4;
+        samples.push({ r: data[i], g: data[i+1], b: data[i+2] });
+        i = (y * canvas.width + (canvas.width - 1)) * 4;
+        samples.push({ r: data[i], g: data[i+1], b: data[i+2] });
+    }
+
+    // Find the median-ish color to avoid outlier noise
+    const medianColor = samples.sort((a, b) => (a.r + a.g + a.b) - (b.r + b.g + b.b))[Math.floor(samples.length / 2)];
+    const bgR = medianColor.r, bgG = medianColor.g, bgB = medianColor.b;
+
+    const tolerance = 80; // High tolerance for noisy JPEG sprite sheets
     let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
     let hasContent = false;
 
@@ -101,14 +125,19 @@ export async function removeBgAndCenter(img: HTMLImageElement): Promise<Blob> {
             const i = (y * canvas.width + x) * 4;
             const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
             
-            // Content check: not transparent AND (not near-white)
-            const isWhite = r >= t && g >= t && b >= t;
-            if (a > 20 && !isWhite) {
+            const diff = Math.sqrt(
+                Math.pow(r - bgR, 2) + 
+                Math.pow(g - bgG, 2) + 
+                Math.pow(b - bgB, 2)
+            );
+
+            // If we are far enough from the background color
+            if (a > 10 && diff > tolerance) {
                 if (x < minX) minX = x; if (x > maxX) maxX = x;
                 if (y < minY) minY = y; if (y > maxY) maxY = y;
                 hasContent = true;
             } else {
-                data[i+3] = 0; // Scrub to alpha
+                data[i+3] = 0; // Scrub
             }
         }
     }
@@ -118,16 +147,16 @@ export async function removeBgAndCenter(img: HTMLImageElement): Promise<Blob> {
     const contentW = maxX - minX + 1;
     const contentH = maxY - minY + 1;
     
-    // Ignore noise fragments
-    if (contentW < 5 || contentH < 5) return new Promise((res) => canvas.toBlob(b => res(b!), 'image/png'));
-
     const final = document.createElement('canvas');
-    const size = 1024; // Force high res for processed icons
+    const size = 1024;
     final.width = size;
     final.height = size;
     const fctx = final.getContext('2d')!;
 
-    const drawArea = size * 0.75; // Leave breathing room
+    // For pixel art, we disable smoothing during the recenter/rescale process
+    fctx.imageSmoothingEnabled = false;
+
+    const drawArea = size * 0.9;
     const scale = Math.min(drawArea / contentW, drawArea / contentH);
     
     const dw = contentW * scale;
@@ -143,6 +172,15 @@ export async function removeBgAndCenter(img: HTMLImageElement): Promise<Blob> {
     fctx.drawImage(temp, minX, minY, contentW, contentH, dx, dy, dw, dh);
 
     return new Promise((res) => final.toBlob(b => res(b!), 'image/png'));
+}
+
+function hexToRgb(hex: string) {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    return result ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16)
+    } : { r: 0, g: 0, b: 0 };
 }
 
 export async function upscaleAndEditImage(
@@ -165,79 +203,106 @@ export async function upscaleAndEditImage(
     canvas.width = targetSize; canvas.height = targetSize;
     const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
 
+    // Pixel Art Mode: Disable all smoothing
+    if (effects.isPixelArt) {
+        ctx.imageSmoothingEnabled = false;
+    }
+
     let sx = 0, sy = 0, sw = img.width, sh = img.height;
     if (cropBox) {
       sy = (cropBox[0] / 1000) * img.height; sx = (cropBox[1] / 1000) * img.width;
       sh = ((cropBox[2] - cropBox[0]) / 1000) * img.height; sw = ((cropBox[3] - cropBox[1]) / 1000) * img.width;
     }
 
-    const padding = targetSize * 0.12;
-    const drawSize = targetSize - padding * 2;
-    const scaleFactor = Math.min(drawSize / sw, drawSize / sh);
-    
-    let animScale = 1;
-    let animRotate = 0;
-    let animXOffset = (targetSize - sw * scaleFactor) / 2;
-    let animYOffset = (targetSize - sh * scaleFactor) / 2;
-
-    if (effects.isAnimated) {
-      const time = Date.now() / 1000;
-      const speed = effects.animationSpeed;
-      const intensity = effects.animationIntensity / 100;
-      if (effects.animationType === 'float') animYOffset += Math.sin(time * speed) * 20 * intensity;
-      else if (effects.animationType === 'pulse') animScale += Math.sin(time * speed) * 0.2 * intensity;
-      else if (effects.animationType === 'spin') animRotate = time * speed * 30 * intensity;
+    let margin = targetSize * 0.15;
+    if (effects.autoFit) {
+      const extra = Math.max(effects.outlineWidth, effects.glowBlur, effects.shadowBlur);
+      margin += extra * (targetSize / 512);
     }
 
-    const dw = sw * scaleFactor * animScale;
-    const dh = sh * scaleFactor * animScale;
+    const drawSize = targetSize - margin * 2;
+    const scaleFactor = Math.min(drawSize / sw, drawSize / sh);
+    
+    const dw = sw * scaleFactor;
+    const dh = sh * scaleFactor;
     const dx = (targetSize - dw) / 2;
     const dy = (targetSize - dh) / 2;
-
-    ctx.imageSmoothingEnabled = fidelityFactor > 20 && effects.pixelDepth === 'none'; 
 
     const maskCanvas = document.createElement('canvas');
     maskCanvas.width = targetSize; maskCanvas.height = targetSize;
     const mctx = maskCanvas.getContext('2d', { willReadFrequently: true })!;
-    
-    mctx.save();
-    mctx.translate(targetSize/2, targetSize/2);
-    mctx.rotate(animRotate * Math.PI / 180);
-    mctx.translate(-targetSize/2, -targetSize/2);
-    if (effects.cornerRadius > 0) {
-        mctx.beginPath(); mctx.roundRect(dx, dy, dw, dh, (effects.cornerRadius/100)*(dw/2)); mctx.clip();
-    }
-    mctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
-    mctx.restore();
+    if (effects.isPixelArt) mctx.imageSmoothingEnabled = false;
 
+    mctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+
+    // Alpha Scrub during process if enabled
     if (effects.removeBackground) {
         const mData = mctx.getImageData(0,0,targetSize,targetSize);
         const d = mData.data;
-        const t = 245; 
+        const br = d[0], bg = d[1], bb = d[2];
+        const tol = 100; // Aggressive
         for (let i=0; i<d.length; i+=4) {
-            if (d[i] > t && d[i+1] > t && d[i+2] > t) d[i+3] = 0;
+            const dist = Math.sqrt(Math.pow(d[i]-br,2) + Math.pow(d[i+1]-bg,2) + Math.pow(d[i+2]-bb,2));
+            if (dist < tol) d[i+3] = 0;
         }
         mctx.putImageData(mData, 0, 0);
     }
 
-    ctx.save();
-    let filterStr = `brightness(${effects.brightness}%) contrast(${effects.contrast}%) saturate(${effects.saturation}%) hue-rotate(${effects.hueRotate}deg)`;
-    ctx.filter = filterStr;
-    ctx.drawImage(maskCanvas, 0, 0);
-    ctx.restore();
+    // 1. Draw Shadows & Glow
+    if (effects.shadowOpacity > 0 || effects.glowOpacity > 0) {
+        ctx.save();
+        if (effects.shadowOpacity > 0) {
+            ctx.shadowBlur = effects.shadowBlur * (targetSize / 512);
+            ctx.shadowColor = effects.shadowColor;
+            ctx.shadowOffsetX = effects.shadowX * (targetSize / 512);
+            ctx.shadowOffsetY = effects.shadowY * (targetSize / 512);
+            ctx.globalAlpha = effects.shadowOpacity;
+            ctx.drawImage(maskCanvas, 0, 0);
+        }
+        if (effects.glowOpacity > 0) {
+            ctx.shadowBlur = effects.glowBlur * (targetSize / 512);
+            ctx.shadowColor = effects.glowColor;
+            ctx.globalAlpha = effects.glowOpacity;
+            for(let i=0; i<3; i++) ctx.drawImage(maskCanvas, 0, 0);
+        }
+        ctx.restore();
+    }
 
+    // 2. Draw Outlines
     if (effects.outlineWidth > 0) {
         ctx.save();
         const thickness = effects.outlineWidth * (targetSize / 512);
         ctx.globalCompositeOperation = 'destination-over';
         ctx.fillStyle = effects.outlineColor;
         ctx.globalAlpha = effects.outlineOpacity;
+        
+        const steps = 360 / 15;
         for(let i=0; i<360; i += 15) {
             let a = (i * Math.PI) / 180;
-            ctx.drawImage(maskCanvas, Math.cos(a)*thickness, Math.sin(a)*thickness);
+            let ox = Math.cos(a) * thickness;
+            let oy = Math.sin(a) * thickness;
+            
+            if (effects.outlineStyle === 'wavy') {
+                const wave = Math.sin((i / 360) * Math.PI * 2 * effects.waveFrequency) * effects.waveAmplitude;
+                ox += Math.cos(a) * wave;
+                oy += Math.sin(a) * wave;
+            } else if (effects.outlineStyle === 'dotted') {
+                if (Math.floor(i / 30) % 2 === 0) continue; 
+            } else if (effects.outlineStyle === 'pixelated') {
+                ox = Math.round(ox / 4) * 4;
+                oy = Math.round(oy / 4) * 4;
+            }
+            
+            ctx.drawImage(maskCanvas, ox, oy);
         }
         ctx.restore();
     }
+
+    // 3. Final Composite
+    ctx.save();
+    ctx.filter = `brightness(${effects.brightness}%) contrast(${effects.contrast}%) saturate(${effects.saturation}%) hue-rotate(${effects.hueRotate}deg)`;
+    ctx.drawImage(maskCanvas, 0, 0);
+    ctx.restore();
 
     canvas.toBlob((b) => b ? resolve(b) : reject('Blob failed'), 'image/png');
   });
