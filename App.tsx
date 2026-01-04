@@ -9,11 +9,12 @@ import { StickerClipboard } from './components/StickerClipboard';
 import { Desktop } from './components/Desktop';
 import { Cauldron } from './components/Cauldron';
 import { FloatingHelp } from './components/FloatingHelp';
+import { ControlMatrix } from './components/ControlMatrix';
 import { ProcessedFile, Resolution, ExportFormat, CustomSticker, StickerTexture, BatchEffects, DesktopAssignments, GeneratedPackItem } from './types';
 import { parseIcoAndGetLargestImage } from './utils/icoParser';
 import { upscaleAndEditImage, DEFAULT_EFFECTS, calculateFidelity } from './utils/imageProcessor';
 import { wrapPngInIco } from './utils/icoEncoder';
-import { generateStickerAI, getEffectRecommendation } from './utils/aiVision';
+import { generateStickerAI, getEffectRecommendation, generateIconImage } from './utils/aiVision';
 import { Hammer, Wand2, Monitor, Stars, AlertTriangle, HelpCircle, Coffee, Layout, Sun, Moon, FileWarning } from 'lucide-react';
 
 declare var JSZip: any;
@@ -25,6 +26,8 @@ interface FileSource {
   rawUrl: string; 
   cropBox?: [number, number, number, number];
   fidelity: number;
+  prompt?: string;
+  label?: string;
 }
 
 const App: React.FC = () => {
@@ -38,9 +41,12 @@ const App: React.FC = () => {
   const [showComparison, setShowComparison] = useState(false);
   const [recommendation, setRecommendation] = useState<string | null>(null);
   const [desktopAssignments, setDesktopAssignments] = useState<DesktopAssignments>({});
-  const [showAnimationNotice, setShowAnimationNotice] = useState(false);
   const [lastAction, setLastAction] = useState<string | null>(null);
   const [errorInfo, setErrorInfo] = useState<{ msg: string, fix: string } | null>(null);
+
+  // Selection state
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
 
   const sourceCache = useRef<Map<string, FileSource>>(new Map());
 
@@ -118,14 +124,14 @@ const App: React.FC = () => {
       const url = URL.createObjectURL(item.blob);
       await new Promise(res => { tempImg.onload = res; tempImg.src = url; });
       
-      const fidelity = 100; // Generated icons are high quality
-      sourceCache.current.set(id, { id, image: tempImg, rawUrl: url, fidelity });
+      const fidelity = 100; 
+      sourceCache.current.set(id, { id, image: tempImg, rawUrl: url, fidelity, prompt: item.prompt, label: item.label });
       
       const initialPng = await upscaleAndEditImage(tempImg, resolution, effects, undefined, fidelity);
       newFiles.push({
         id, originalName: `${item.label}.png`, newName: `${item.label}.${exportFormat}`,
         blob: initialPng, previewUrl: URL.createObjectURL(initialPng), status: 'completed' as const, width: resolution, height: resolution,
-        originalType: 'image/png', fidelityScore: fidelity
+        originalType: 'image/png', fidelityScore: fidelity, isAiGenerated: true
       });
     }
     setFiles(prev => [...newFiles, ...prev]);
@@ -133,6 +139,72 @@ const App: React.FC = () => {
     setMode('upscale');
     triggerGratification('Pack Imported');
   }, [resolution, effects, exportFormat]);
+
+  const handleToggleSelect = (id: string, isShift: boolean) => {
+    if (isShift && lastSelectedId) {
+      const allIds = files.map(f => f.id);
+      const start = allIds.indexOf(lastSelectedId);
+      const end = allIds.indexOf(id);
+      const range = allIds.slice(Math.min(start, end), Math.max(start, end) + 1);
+      setSelectedIds(prev => Array.from(new Set([...prev, ...range])));
+    } else {
+      setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+      setLastSelectedId(id);
+    }
+  };
+
+  const handleBulkAction = async (action: string, payload?: any) => {
+    if (selectedIds.length === 0) return;
+    setIsProcessing(true);
+    triggerGratification(`Bulk ${action}`);
+
+    try {
+      if (action === 'delete') {
+        setFiles(prev => prev.filter(f => !selectedIds.includes(f.id)));
+        setSelectedIds([]);
+      } 
+      else if (action === 'make-transparent') {
+        setEffects(prev => ({ ...prev, removeBackground: true }));
+      }
+      else if (action === 'reroll' || action === 'change-style' || action === 'guide-prompt') {
+        const updatedFiles = [...files];
+        for (const id of selectedIds) {
+          const fileIdx = updatedFiles.findIndex(f => f.id === id);
+          const source = sourceCache.current.get(id);
+          if (fileIdx === -1 || !source || !source.prompt) continue;
+
+          updatedFiles[fileIdx] = { ...updatedFiles[fileIdx], status: 'processing' };
+          setFiles([...updatedFiles]);
+
+          let finalPrompt = source.prompt;
+          if (action === 'change-style') finalPrompt = `Icon: ${source.label}. Style: ${payload}. Professional, clean.`;
+          else if (action === 'guide-prompt') finalPrompt = `Icon: ${payload}. ${source.label} theme. Professional, clean.`;
+
+          const newDataUrl = await generateIconImage(finalPrompt);
+          const res = await fetch(newDataUrl);
+          const blob = await res.blob();
+          
+          const tempImg = new Image();
+          await new Promise(r => { tempImg.onload = r; tempImg.src = newDataUrl; });
+          
+          sourceCache.current.set(id, { ...source, image: tempImg, rawUrl: newDataUrl });
+          const updatedPng = await upscaleAndEditImage(tempImg, resolution, effects, undefined, 100);
+          
+          updatedFiles[fileIdx] = {
+            ...updatedFiles[fileIdx],
+            blob: updatedPng,
+            previewUrl: URL.createObjectURL(updatedPng),
+            status: 'completed'
+          };
+          setFiles([...updatedFiles]);
+        }
+      }
+    } catch (e) {
+      setErrorInfo({ msg: "Bulk operation failed", fix: "Try smaller batches or check your network." });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
 
   const handleDownloadZip = useCallback(() => {
     const zip = new (window as any).JSZip();
@@ -175,12 +247,19 @@ const App: React.FC = () => {
         </div>
       )}
 
+      <ControlMatrix selectedIds={selectedIds} onAction={handleBulkAction} visible={selectedIds.length > 0 && mode === 'upscale'} />
+
       <div className="max-w-7xl mx-auto px-6 py-10 relative">
         <div className="flex justify-between items-center mb-10">
             <Header />
-            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-4 bg-[#c6c6c6] border-4 border-t-[#ffffff] border-l-[#ffffff] border-r-[#555555] border-b-[#555555] shadow-xl hover:scale-110 active:scale-95 transition-all">
-                {isDarkMode ? <Sun className="text-amber-500" size={28} /> : <Moon className="text-indigo-600" size={28} />}
-            </button>
+            <div className="flex gap-4">
+              {selectedIds.length > 0 && (
+                <button onClick={() => setSelectedIds([])} className="px-6 py-3 bg-red-800 border-4 border-white text-white text-[10px] font-black uppercase hover:bg-red-700 transition-all">Deselect All</button>
+              )}
+              <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-4 bg-[#c6c6c6] border-4 border-t-[#ffffff] border-l-[#ffffff] border-r-[#555555] border-b-[#555555] shadow-xl hover:scale-110 active:scale-95 transition-all">
+                  {isDarkMode ? <Sun className="text-amber-500" size={28} /> : <Moon className="text-indigo-600" size={28} />}
+              </button>
+            </div>
         </div>
 
         <main className="max-w-5xl mx-auto">
@@ -231,7 +310,13 @@ const App: React.FC = () => {
                     <h3 className="text-sm font-black uppercase tracking-widest text-slate-500 flex items-center gap-4"><Layout size={20} className="text-indigo-400"/> Inventory</h3>
                     <button onClick={() => setShowComparison(!showComparison)} className="bg-[#333] border-4 border-[#555] px-6 py-2 text-[11px] uppercase font-bold text-white hover:bg-white/10 transition-all">{showComparison ? "Gallery" : "Comparison"}</button>
                   </div>
-                  <Gallery files={files} comparisonMode={showComparison} sources={sourceCache.current} />
+                  <Gallery 
+                    files={files} 
+                    comparisonMode={showComparison} 
+                    sources={sourceCache.current} 
+                    selectedIds={selectedIds}
+                    onToggleSelect={handleToggleSelect}
+                  />
               </div>
             </div>
           )}

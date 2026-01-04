@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { Palette, Search, Zap, X, RefreshCw, Loader, Coffee, Tv, Box, Wand2, ArrowRightCircle, CheckCircle2, Sparkles, Binary, Package } from 'lucide-react';
-import { getPackRecommendations, getSubThemes, generatePackPrompts, generateIconImage } from '../utils/aiVision';
+import { Palette, Search, Zap, X, RefreshCw, Loader, Coffee, Tv, Box, Wand2, ArrowRightCircle, CheckCircle2, Sparkles, Binary, Package, Scissors } from 'lucide-react';
+import { getPackRecommendations, getSubThemes, generatePackPrompts, generateIconGrid } from '../utils/aiVision';
 import { GeneratedPackItem } from '../types';
 
 interface CauldronProps {
@@ -71,37 +71,69 @@ export const Cauldron: React.FC<CauldronProps> = ({ onPackGenerated, onImportToS
     
     setIsCooking(true);
     setCookProgress(5);
-    setCookMessage("Dreaming up icon prompts...");
+    setCookMessage("Dreaming up icon grid...");
     
     try {
-      const prompts = await generatePackPrompts(source, category, selectedStyle);
+      // 1. Generate Metadata and Prompt
+      const { items, masterPrompt } = await generatePackPrompts(source, category, selectedStyle);
       setCookProgress(20);
+      setCookMessage("Brewing Sprite Sheet (Batch 1/1)...");
+
+      // 2. Generate Single Master Grid
+      const gridDataUrl = await generateIconGrid(masterPrompt);
+      setCookProgress(60);
+      setCookMessage("Slicing and Refining 10 Icons...");
+
+      // 3. Slice Grid into 10 items
+      const masterImg = new Image();
+      await new Promise(res => { masterImg.onload = res; masterImg.src = gridDataUrl; });
       
       const results: GeneratedPackItem[] = [];
-      const batchSize = 10;
-      
-      for (let i = 0; i < prompts.length; i++) {
-        setCookMessage(`Brewing Icon ${i + 1}/10: ${prompts[i].label}`);
-        const dataUrl = await generateIconImage(prompts[i].prompt);
+      const cols = 4;
+      const rows = 3;
+      const cellW = masterImg.width / cols;
+      const cellH = masterImg.height / rows;
+
+      const sliceCanvas = document.createElement('canvas');
+      sliceCanvas.width = 512; // Standard High Res for slice
+      sliceCanvas.height = 512;
+      const sctx = sliceCanvas.getContext('2d')!;
+
+      for (let i = 0; i < 10; i++) {
+        const r = Math.floor(i / cols);
+        const c = i % cols;
         
+        sctx.clearRect(0, 0, 512, 512);
+        // Draw slice with a bit of internal padding to avoid grid lines
+        const pad = cellW * 0.05;
+        sctx.drawImage(
+            masterImg, 
+            c * cellW + pad, r * cellH + pad, cellW - pad*2, cellH - pad*2, 
+            0, 0, 512, 512
+        );
+        
+        const dataUrl = sliceCanvas.toDataURL('image/png');
         const res = await fetch(dataUrl);
         const blob = await res.blob();
         
         results.push({
-          ...prompts[i],
+          label: items[i]?.label || `Icon ${i+1}`,
+          prompt: masterPrompt,
           blob,
           previewUrl: dataUrl
         });
-        setCookProgress(20 + ((i + 1) / batchSize) * 80);
+
+        setCookProgress(60 + (i / 10) * 40);
       }
       
       setLastGeneratedPack(results);
       onPackGenerated(results);
       setCookMessage("Pack complete!");
     } catch (e) {
-      onError("The Cauldron Cracked!", "A spiritual disturbance interrupted the brew. WAT DO? Try again with a simpler source name.");
+      console.error(e);
+      onError("The Cauldron Cracked!", "Batch generation failed. Try again with a simpler source name.");
     } finally {
-      setTimeout(() => setIsCooking(false), 500);
+      setTimeout(() => setIsCooking(false), 800);
     }
   };
 
@@ -109,7 +141,10 @@ export const Cauldron: React.FC<CauldronProps> = ({ onPackGenerated, onImportToS
     <div className="bg-[#c6c6c6] border-8 border-t-[#ffffff] border-l-[#ffffff] border-r-[#555555] border-b-[#555555] p-10 rounded-sm shadow-2xl relative animate-in fade-in duration-300">
       {isCooking && (
         <div className="absolute inset-0 z-[100] bg-black/90 backdrop-blur-xl flex flex-col items-center justify-center p-10 text-center">
-          <Coffee size={80} className="text-indigo-400 animate-cauldron-mix mb-8" />
+          <div className="relative">
+            <Coffee size={80} className="text-indigo-400 animate-cauldron-mix mb-8" />
+            <div className="absolute top-0 right-0 animate-bubble-up text-indigo-300"><Sparkles size={20}/></div>
+          </div>
           <p className="text-white font-black uppercase tracking-[0.4em] animate-pulse mb-8 max-w-md">{cookMessage}</p>
           <div className="w-full max-w-xl h-6 bg-[#333] border-4 border-white p-1">
             <div className="h-full bg-indigo-500 transition-all duration-300" style={{ width: `${cookProgress}%` }} />
@@ -124,7 +159,7 @@ export const Cauldron: React.FC<CauldronProps> = ({ onPackGenerated, onImportToS
           </div>
           <div>
             <h2 className="text-4xl font-black uppercase text-white drop-shadow-[3px_3px_0px_rgba(0,0,0,1)]">The Cauldron</h2>
-            <p className="text-[11px] text-[#555] font-black tracking-widest uppercase mt-1">AI Powered Batch Summoning</p>
+            <p className="text-[11px] text-[#555] font-black tracking-widest uppercase mt-1">AI Powered Batch Summoning (Grid Optimised)</p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -209,7 +244,7 @@ export const Cauldron: React.FC<CauldronProps> = ({ onPackGenerated, onImportToS
                     <div className="bg-green-500 p-2 border-4 border-white animate-bounce"><CheckCircle2 className="text-white" size={32} /></div>
                     <div>
                         <span className="text-2xl text-white font-black uppercase tracking-tighter">Icon Pack Fully Brewed</span>
-                        <p className="text-[10px] text-indigo-200 uppercase font-black tracking-widest">10 unique assets ready for deployment</p>
+                        <p className="text-[10px] text-indigo-200 uppercase font-black tracking-widest">10 unique assets sliced from master sprite sheet</p>
                     </div>
                 </div>
                 <div className="flex gap-4">

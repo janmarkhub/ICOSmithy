@@ -58,29 +58,55 @@ export async function getPersonProfile(name: string): Promise<PersonBio | null> 
   return JSON.parse(text);
 }
 
-export async function generatePackPrompts(source: string, category: string, style: string): Promise<GeneratedPackItem[]> {
+export async function generatePackPrompts(source: string, category: string, style: string): Promise<{ items: GeneratedPackItem[], masterPrompt: string }> {
   const response = await ai.models.generateContent({
     model: "gemini-3-pro-preview",
-    contents: `Generate 10 icon prompts for a desktop theme based on "${source}" with the specific focus of "${category}" in the style of "${style}". 
-    The 10 icons must correspond to: 
-    1. Recycle Bin Empty, 2. Recycle Bin Full, 3. Start Button Idle, 4. My PC, 5. Control Panel, 6. Network, 7. Account, 8. Folder, 9. Themed Asset A, 10. Themed Asset B.
-    Each prompt should be a specific description for an image generation model. Return as a JSON array of objects with 'label' and 'prompt'.`,
+    contents: `We are creating a 10-icon desktop theme for "${source}" (${category}) in "${style}" style. 
+    The 10 icons are: 1. Recycle Bin Empty, 2. Recycle Bin Full, 3. Start Button, 4. My PC, 5. Control Panel, 6. Network, 7. Account, 8. Folder, 9. Themed Asset A, 10. Themed Asset B.
+    
+    TASK:
+    1. Provide a short label for each.
+    2. Provide a single 'masterPrompt' for a 4x3 grid (sprite sheet) containing these 10 icons in sequence.
+    The description should tell the AI to generate 10 distinct, centered squares on a plain neutral background.
+    Return as JSON: { "items": [{ "label": "..." }], "masterPrompt": "..." }`,
     config: {
       responseMimeType: "application/json",
       responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            label: { type: Type.STRING },
-            prompt: { type: Type.STRING }
+        type: Type.OBJECT,
+        properties: {
+          items: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                label: { type: Type.STRING }
+              }
+            }
           },
-          required: ["label", "prompt"]
-        }
+          masterPrompt: { type: Type.STRING }
+        },
+        required: ["items", "masterPrompt"]
       }
     }
   });
-  return JSON.parse(response.text || '[]');
+  return JSON.parse(response.text || '{"items": [], "masterPrompt": ""}');
+}
+
+export async function generateIconGrid(masterPrompt: string): Promise<string> {
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash-image',
+    contents: {
+      parts: [
+        { text: `Create a high-quality sprite sheet grid of 12 squares (4 columns, 3 rows). Inside each square is a centered app icon. Total 10 unique icons following this theme: ${masterPrompt}. High contrast, solid plain background, professional, clean design.` }
+      ]
+    },
+    config: { imageConfig: { aspectRatio: "1:1" } }
+  });
+
+  for (const part of response.candidates?.[0].content.parts || []) {
+    if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
+  }
+  throw new Error("Grid image generation failed");
 }
 
 export async function generateIconImage(prompt: string): Promise<string> {
