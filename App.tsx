@@ -18,7 +18,7 @@ import { parseIcoAndGetLargestImage } from './utils/icoParser';
 import { upscaleAndEditImage, DEFAULT_EFFECTS, calculateFidelity, removeBgAndCenter } from './utils/imageProcessor';
 import { wrapPngInIco } from './utils/icoEncoder';
 import { generateIconImage, getPersonProfile, generatePackPrompts, generateIconGrid } from './utils/aiVision';
-import { Hammer, Wand2, Monitor, AlertTriangle, Coffee, Sun, Moon, Sparkles, Scissors } from 'lucide-react';
+import { Hammer, Wand2, Monitor, AlertTriangle, Coffee, Sun, Moon, Sparkles, Scissors, Palette } from 'lucide-react';
 
 declare var JSZip: any;
 declare var saveAs: any;
@@ -49,7 +49,10 @@ const App: React.FC = () => {
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
-  const [toolboxOpen, setToolboxOpen] = useState(true);
+  
+  // Refactored Toolbox state
+  const [showMatrix, setShowMatrix] = useState(false);
+  const [showPaletteForge, setShowPaletteForge] = useState(false);
 
   const sourceCache = useRef<Map<string, FileSource>>(new Map());
 
@@ -134,6 +137,7 @@ const App: React.FC = () => {
     } finally {
       setSelectedIds([]);
       setIsProcessing(false);
+      setShowMatrix(false);
     }
   };
 
@@ -192,19 +196,33 @@ const App: React.FC = () => {
 
   const handleToggleSelect = useCallback((id: string, isShift: boolean) => {
     setSelectedIds(prev => {
+      let next;
       if (isShift && lastSelectedId) {
         const lastIdx = files.findIndex(f => f.id === lastSelectedId);
         const currentIdx = files.findIndex(f => f.id === id);
         if (lastIdx !== -1 && currentIdx !== -1) {
           const start = Math.min(lastIdx, currentIdx);
           const end = Math.max(lastIdx, currentIdx);
-          return Array.from(new Set([...prev, ...files.slice(start, end + 1).map(f => f.id)]));
+          next = Array.from(new Set([...prev, ...files.slice(start, end + 1).map(f => f.id)]));
+        } else {
+          next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
         }
+      } else {
+        next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
       }
       setLastSelectedId(id);
-      return prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      
+      // Auto-show matrix on selection if not already shown
+      if (next.length > 0 && !showMatrix && !showPaletteForge) {
+          setShowMatrix(true);
+      }
+      if (next.length === 0) {
+          setShowMatrix(false);
+          setShowPaletteForge(false);
+      }
+      return next;
     });
-  }, [files, lastSelectedId]);
+  }, [files, lastSelectedId, showMatrix, showPaletteForge]);
 
   return (
     <div className={`min-h-screen transition-all duration-300 flex flex-col items-center p-6 ${isDarkMode ? 'bg-[#121212] text-slate-100' : 'bg-slate-200 text-slate-900'}`}>
@@ -227,16 +245,31 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {/* Toolbox Refactored */}
       <div className="toolbox-container">
-        {selectedIds.length > 0 && mode !== 'test' && toolboxOpen && (
-          <div className="pointer-events-auto flex flex-col gap-4">
-            <ControlMatrix selectedIds={selectedIds} onAction={handleBulkAction} visible={true} onClose={() => setToolboxOpen(false)} />
-            <PaletteForge onApplyPalette={handleApplyPalette} visible={true} onClose={() => setToolboxOpen(false)} />
+        {selectedIds.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <button 
+                onClick={() => setShowMatrix(!showMatrix)} 
+                className={`win-btn p-3 border-2 transition-all ${showMatrix ? 'bg-indigo-600 text-white' : 'bg-white text-black'}`}
+                title="Action Matrix"
+            >
+                <Hammer size={20} />
+            </button>
+            <button 
+                onClick={() => setShowPaletteForge(!showPaletteForge)} 
+                className={`win-btn p-3 border-2 transition-all ${showPaletteForge ? 'bg-indigo-600 text-white' : 'bg-white text-black'}`}
+                title="Palette Forge"
+            >
+                <Palette size={20} />
+            </button>
           </div>
         )}
-        {!toolboxOpen && selectedIds.length > 0 && (
-          <button onClick={() => setToolboxOpen(true)} className="win-btn bg-indigo-600 text-white p-2 pointer-events-auto"><Hammer size={16} /></button>
-        )}
+        
+        <div className="pointer-events-auto flex flex-col gap-4">
+          <ControlMatrix selectedIds={selectedIds} onAction={handleBulkAction} visible={showMatrix} onClose={() => setShowMatrix(false)} />
+          <PaletteForge onApplyPalette={handleApplyPalette} visible={showPaletteForge} onClose={() => setShowPaletteForge(false)} />
+        </div>
       </div>
 
       <div className="w-full max-w-5xl space-y-6">

@@ -32,16 +32,18 @@ export const PaletteForge: React.FC<PaletteForgeProps> = ({ onApplyPalette, visi
         <div className="grid grid-cols-2 gap-2 mb-4">
             {colors.map((c, i) => (
                 <RetroTooltip key={i} title={`Channel ${i+1}`} description="Dominant palette color.">
-                  <input 
-                      type="color" 
-                      value={c} 
-                      onChange={e => {
-                          const next = [...colors];
-                          next[i] = e.target.value;
-                          setColors(next);
-                      }}
-                      className="w-full h-6 border-2 border-black cursor-pointer hover:scale-105 transition-transform"
-                  />
+                  <div onClick={e => e.stopPropagation()}>
+                    <input 
+                        type="color" 
+                        value={c} 
+                        onChange={e => {
+                            const next = [...colors];
+                            next[i] = e.target.value;
+                            setColors(next);
+                        }}
+                        className="w-full h-6 border-2 border-black cursor-pointer hover:scale-105 transition-transform"
+                    />
+                  </div>
                 </RetroTooltip>
             ))}
         </div>

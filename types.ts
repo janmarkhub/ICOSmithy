@@ -113,6 +113,8 @@ export interface BatchEffects {
   creeperOverlay: boolean;
   sepiaTone: number;
   blurIntensity: number;
+  cleanupIntensity: number;
+  lineartMode: boolean;
 }
 
 export interface DesktopAssignments {

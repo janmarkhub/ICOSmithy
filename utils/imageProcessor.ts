@@ -59,7 +59,7 @@ export const DEFAULT_EFFECTS: BatchEffects = {
   glassOpacity: 0,
   finishType: 'none',
   finishOpacity: 0.8,
-  removeBackground: false,
+  removeBackground: true, 
   normalizeInputs: true,
   smartUpscaleIntensity: 50,
   isAnimated: false,
@@ -74,7 +74,9 @@ export const DEFAULT_EFFECTS: BatchEffects = {
   crtEffect: false,
   creeperOverlay: false,
   sepiaTone: 0,
-  blurIntensity: 0
+  blurIntensity: 0,
+  cleanupIntensity: 30, // Default to a moderate cleanup
+  lineartMode: false
 };
 
 export function calculateFidelity(img: HTMLImageElement): number {
@@ -83,9 +85,7 @@ export function calculateFidelity(img: HTMLImageElement): number {
 }
 
 /**
- * Aggressive Alpha Scrubbing.
- * Sampler iterates entire image to find most common background "island" 
- * then flood-replaces or color-keys based on distance.
+ * High-precision alpha scrubbing with noise island removal.
  */
 export async function removeBgAndCenter(img: HTMLImageElement): Promise<Blob> {
     const canvas = document.createElement('canvas');
@@ -96,48 +96,53 @@ export async function removeBgAndCenter(img: HTMLImageElement): Promise<Blob> {
     const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
     const data = imageData.data;
 
-    // Sample several points along the edges to find the most likely background color
-    const samples: { r: number, g: number, b: number }[] = [];
-    const step = 4;
-    for (let x = 0; x < canvas.width; x += step) {
-        let i = x * 4;
-        samples.push({ r: data[i], g: data[i+1], b: data[i+2] });
-        i = ((canvas.height - 1) * canvas.width + x) * 4;
-        samples.push({ r: data[i], g: data[i+1], b: data[i+2] });
+    const edgeColors: {r:number, g:number, b:number}[] = [];
+    const step = Math.max(1, Math.floor(canvas.width / 40));
+    for (let x=0; x<canvas.width; x+=step) {
+      const t = x*4; edgeColors.push({r:data[t], g:data[t+1], b:data[t+2]});
+      const b = ((canvas.height-1)*canvas.width+x)*4; edgeColors.push({r:data[b], g:data[b+1], b:data[b+2]});
     }
-    for (let y = 0; y < canvas.height; y += step) {
-        let i = (y * canvas.width) * 4;
-        samples.push({ r: data[i], g: data[i+1], b: data[i+2] });
-        i = (y * canvas.width + (canvas.width - 1)) * 4;
-        samples.push({ r: data[i], g: data[i+1], b: data[i+2] });
+    for (let y=0; y<canvas.height; y+=step) {
+      const l = (y*canvas.width)*4; edgeColors.push({r:data[l], g:data[l+1], b:data[l+2]});
+      const r = (y*canvas.width+(canvas.width-1))*4; edgeColors.push({r:data[r], g:data[r+1], b:data[r+2]});
     }
 
-    // Find the median-ish color to avoid outlier noise
-    const medianColor = samples.sort((a, b) => (a.r + a.g + a.b) - (b.r + b.g + b.b))[Math.floor(samples.length / 2)];
-    const bgR = medianColor.r, bgG = medianColor.g, bgB = medianColor.b;
+    const med = edgeColors.sort((a,b) => (a.r+a.g+a.b) - (b.r+b.g+b.b))[Math.floor(edgeColors.length/2)];
+    const bgR = med.r, bgG = med.g, bgB = med.b;
 
-    const tolerance = 80; // High tolerance for noisy JPEG sprite sheets
+    // First pass: Basic thresholding
+    const tolerance = 95; 
     let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
     let hasContent = false;
 
-    for (let y = 0; y < canvas.height; y++) {
-        for (let x = 0; x < canvas.width; x++) {
-            const i = (y * canvas.width + x) * 4;
-            const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
-            
-            const diff = Math.sqrt(
-                Math.pow(r - bgR, 2) + 
-                Math.pow(g - bgG, 2) + 
-                Math.pow(b - bgB, 2)
-            );
+    for (let i = 0; i < data.length; i += 4) {
+        const d = Math.sqrt(Math.pow(data[i]-bgR,2) + Math.pow(data[i+1]-bgG,2) + Math.pow(data[i+2]-bgB,2));
+        if (data[i+3] > 10 && d > tolerance) {
+            const x = (i/4) % canvas.width;
+            const y = Math.floor((i/4) / canvas.width);
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+            hasContent = true;
+        } else {
+            data[i+3] = 0;
+        }
+    }
 
-            // If we are far enough from the background color
-            if (a > 10 && diff > tolerance) {
-                if (x < minX) minX = x; if (x > maxX) maxX = x;
-                if (y < minY) minY = y; if (y > maxY) maxY = y;
-                hasContent = true;
-            } else {
-                data[i+3] = 0; // Scrub
+    // Second pass: Island removal (removes isolated noise pixels)
+    if (hasContent) {
+        for (let y = 1; y < canvas.height - 1; y++) {
+            for (let x = 1; x < canvas.width - 1; x++) {
+                const i = (y * canvas.width + x) * 4;
+                if (data[i+3] > 0) {
+                    // Check neighbors
+                    let neighbors = 0;
+                    if (data[i-4+3] > 0) neighbors++;
+                    if (data[i+4+3] > 0) neighbors++;
+                    if (data[i-(canvas.width*4)+3] > 0) neighbors++;
+                    if (data[i+(canvas.width*4)+3] > 0) neighbors++;
+                    // If no neighbors, it's noise
+                    if (neighbors === 0) data[i+3] = 0;
+                }
             }
         }
     }
@@ -146,19 +151,15 @@ export async function removeBgAndCenter(img: HTMLImageElement): Promise<Blob> {
 
     const contentW = maxX - minX + 1;
     const contentH = maxY - minY + 1;
-    
     const final = document.createElement('canvas');
     const size = 1024;
     final.width = size;
     final.height = size;
     const fctx = final.getContext('2d')!;
-
-    // For pixel art, we disable smoothing during the recenter/rescale process
     fctx.imageSmoothingEnabled = false;
 
     const drawArea = size * 0.9;
     const scale = Math.min(drawArea / contentW, drawArea / contentH);
-    
     const dw = contentW * scale;
     const dh = contentH * scale;
     const dx = (size - dw) / 2;
@@ -174,13 +175,46 @@ export async function removeBgAndCenter(img: HTMLImageElement): Promise<Blob> {
     return new Promise((res) => final.toBlob(b => res(b!), 'image/png'));
 }
 
-function hexToRgb(hex: string) {
-    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-    return result ? {
-        r: parseInt(result[1], 16),
-        g: parseInt(result[2], 16),
-        b: parseInt(result[3], 16)
-    } : { r: 0, g: 0, b: 0 };
+/**
+ * Smart Denoise: Smooths flat areas while preserving high-contrast edges.
+ */
+function smartDenoise(ctx: CanvasRenderingContext2D, width: number, height: number, intensity: number) {
+    if (intensity <= 0) return;
+    const imageData = ctx.getImageData(0, 0, width, height);
+    const data = imageData.data;
+    const copy = new Uint8ClampedArray(data);
+    
+    // Simple 3x3 selective median/blur
+    const threshold = 15 + (intensity * 0.5); // Color difference threshold
+    
+    for (let y = 1; y < height - 1; y++) {
+        for (let x = 1; x < width - 1; x++) {
+            const i = (y * width + x) * 4;
+            if (data[i+3] === 0) continue;
+
+            let rSum = 0, gSum = 0, bSum = 0, count = 0;
+            const rRef = data[i], gRef = data[i+1], bRef = data[i+2];
+
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    const ni = ((y + dy) * width + (x + dx)) * 4;
+                    const nr = copy[ni], ng = copy[ni+1], nb = copy[ni+2];
+                    
+                    const diff = Math.abs(nr - rRef) + Math.abs(ng - gRef) + Math.abs(nb - bRef);
+                    if (diff < threshold) {
+                        rSum += nr; gSum += ng; bSum += nb; count++;
+                    }
+                }
+            }
+
+            if (count > 0) {
+                data[i] = rSum / count;
+                data[i+1] = gSum / count;
+                data[i+2] = bSum / count;
+            }
+        }
+    }
+    ctx.putImageData(imageData, 0, 0);
 }
 
 export async function upscaleAndEditImage(
@@ -202,10 +236,9 @@ export async function upscaleAndEditImage(
     const canvas = document.createElement('canvas');
     canvas.width = targetSize; canvas.height = targetSize;
     const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-
-    // Pixel Art Mode: Disable all smoothing
-    if (effects.isPixelArt) {
-        ctx.imageSmoothingEnabled = false;
+    ctx.imageSmoothingEnabled = !effects.isPixelArt;
+    if (!effects.isPixelArt && ctx.imageSmoothingEnabled) {
+        ctx.imageSmoothingQuality = 'high';
     }
 
     let sx = 0, sy = 0, sw = img.width, sh = img.height;
@@ -222,7 +255,6 @@ export async function upscaleAndEditImage(
 
     const drawSize = targetSize - margin * 2;
     const scaleFactor = Math.min(drawSize / sw, drawSize / sh);
-    
     const dw = sw * scaleFactor;
     const dh = sh * scaleFactor;
     const dx = (targetSize - dw) / 2;
@@ -231,16 +263,14 @@ export async function upscaleAndEditImage(
     const maskCanvas = document.createElement('canvas');
     maskCanvas.width = targetSize; maskCanvas.height = targetSize;
     const mctx = maskCanvas.getContext('2d', { willReadFrequently: true })!;
-    if (effects.isPixelArt) mctx.imageSmoothingEnabled = false;
-
+    mctx.imageSmoothingEnabled = !effects.isPixelArt;
     mctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
 
-    // Alpha Scrub during process if enabled
     if (effects.removeBackground) {
         const mData = mctx.getImageData(0,0,targetSize,targetSize);
         const d = mData.data;
         const br = d[0], bg = d[1], bb = d[2];
-        const tol = 100; // Aggressive
+        const tol = 110; 
         for (let i=0; i<d.length; i+=4) {
             const dist = Math.sqrt(Math.pow(d[i]-br,2) + Math.pow(d[i+1]-bg,2) + Math.pow(d[i+2]-bb,2));
             if (dist < tol) d[i+3] = 0;
@@ -248,57 +278,59 @@ export async function upscaleAndEditImage(
         mctx.putImageData(mData, 0, 0);
     }
 
-    // 1. Draw Shadows & Glow
-    if (effects.shadowOpacity > 0 || effects.glowOpacity > 0) {
-        ctx.save();
-        if (effects.shadowOpacity > 0) {
-            ctx.shadowBlur = effects.shadowBlur * (targetSize / 512);
-            ctx.shadowColor = effects.shadowColor;
-            ctx.shadowOffsetX = effects.shadowX * (targetSize / 512);
-            ctx.shadowOffsetY = effects.shadowY * (targetSize / 512);
-            ctx.globalAlpha = effects.shadowOpacity;
-            ctx.drawImage(maskCanvas, 0, 0);
+    if (effects.lineartMode) {
+        const mData = mctx.getImageData(0,0,targetSize,targetSize);
+        const d = mData.data;
+        const out = new Uint8ClampedArray(d.length);
+        for (let y=1; y<targetSize-1; y++) {
+            for (let x=1; x<targetSize-1; x++) {
+                const i = (y * targetSize + x) * 4;
+                if (d[i+3] < 10) continue;
+                // Sobel-like edge detection
+                const dx = Math.abs(d[i+4] - d[i-4]) + Math.abs(d[i+4+3] - d[i-4+3]);
+                const dy = Math.abs(d[i+targetSize*4] - d[i-targetSize*4]) + Math.abs(d[i+targetSize*4+3] - d[i-targetSize*4+3]);
+                if (dx + dy > 120) {
+                   out[i] = 0; out[i+1] = 0; out[i+2] = 0; out[i+3] = 255;
+                }
+            }
         }
-        if (effects.glowOpacity > 0) {
-            ctx.shadowBlur = effects.glowBlur * (targetSize / 512);
-            ctx.shadowColor = effects.glowColor;
-            ctx.globalAlpha = effects.glowOpacity;
-            for(let i=0; i<3; i++) ctx.drawImage(maskCanvas, 0, 0);
-        }
-        ctx.restore();
+        mctx.putImageData(new ImageData(out, targetSize, targetSize), 0, 0);
     }
 
-    // 2. Draw Outlines
+    if (effects.cleanupIntensity > 0) {
+        smartDenoise(mctx, targetSize, targetSize, effects.cleanupIntensity);
+    }
+
+    ctx.save();
+    if (effects.shadowOpacity > 0) {
+        ctx.shadowBlur = effects.shadowBlur * (targetSize / 512);
+        ctx.shadowColor = effects.shadowColor;
+        ctx.shadowOffsetX = effects.shadowX * (targetSize / 512);
+        ctx.shadowOffsetY = effects.shadowY * (targetSize / 512);
+        ctx.globalAlpha = effects.shadowOpacity;
+        ctx.drawImage(maskCanvas, 0, 0);
+    }
+    if (effects.glowOpacity > 0) {
+        ctx.shadowBlur = effects.glowBlur * (targetSize / 512);
+        ctx.shadowColor = effects.glowColor;
+        ctx.globalAlpha = effects.glowOpacity;
+        for(let i=0; i<2; i++) ctx.drawImage(maskCanvas, 0, 0);
+    }
+    ctx.restore();
+
     if (effects.outlineWidth > 0) {
         ctx.save();
         const thickness = effects.outlineWidth * (targetSize / 512);
         ctx.globalCompositeOperation = 'destination-over';
         ctx.fillStyle = effects.outlineColor;
         ctx.globalAlpha = effects.outlineOpacity;
-        
-        const steps = 360 / 15;
-        for(let i=0; i<360; i += 15) {
+        for(let i=0; i<360; i += 20) {
             let a = (i * Math.PI) / 180;
-            let ox = Math.cos(a) * thickness;
-            let oy = Math.sin(a) * thickness;
-            
-            if (effects.outlineStyle === 'wavy') {
-                const wave = Math.sin((i / 360) * Math.PI * 2 * effects.waveFrequency) * effects.waveAmplitude;
-                ox += Math.cos(a) * wave;
-                oy += Math.sin(a) * wave;
-            } else if (effects.outlineStyle === 'dotted') {
-                if (Math.floor(i / 30) % 2 === 0) continue; 
-            } else if (effects.outlineStyle === 'pixelated') {
-                ox = Math.round(ox / 4) * 4;
-                oy = Math.round(oy / 4) * 4;
-            }
-            
-            ctx.drawImage(maskCanvas, ox, oy);
+            ctx.drawImage(maskCanvas, Math.cos(a) * thickness, Math.sin(a) * thickness);
         }
         ctx.restore();
     }
 
-    // 3. Final Composite
     ctx.save();
     ctx.filter = `brightness(${effects.brightness}%) contrast(${effects.contrast}%) saturate(${effects.saturation}%) hue-rotate(${effects.hueRotate}deg)`;
     ctx.drawImage(maskCanvas, 0, 0);
