@@ -74,7 +74,9 @@ export const DEFAULT_EFFECTS: BatchEffects = {
   asciiMode: false,
   enchantmentGlint: false,
   crtEffect: false,
-  creeperOverlay: false
+  creeperOverlay: false,
+  sepiaTone: 0,
+  blurIntensity: 0
 };
 
 export function calculateFidelity(img: HTMLImageElement): number {
@@ -94,6 +96,8 @@ function applyTexture(ctx: CanvasRenderingContext2D, x: number, y: number, w: nu
     const grad = ctx.createLinearGradient(x, y, x + w, y + h);
     for(let i=0; i<=1; i+=0.2) grad.addColorStop(i, `hsla(${i*360}, 70%, 50%, 0.4)`);
     ctx.fillStyle = grad; ctx.fillRect(x, y, w, h);
+  } else if (texture === 'gold') {
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.4)'; ctx.fillRect(x, y, w, h);
   } else if (texture === 'realistic') {
     ctx.globalCompositeOperation = 'multiply';
     ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 1;
@@ -138,22 +142,23 @@ export async function upscaleAndEditImage(
     
     let animScale = 1;
     let animRotate = 0;
-    let animX = (targetSize - sw * scaleFactor) / 2;
-    let animY = (targetSize - sh * scaleFactor) / 2;
+    let animXOffset = (targetSize - sw * scaleFactor) / 2;
+    let animYOffset = (targetSize - sh * scaleFactor) / 2;
 
     if (effects.isAnimated) {
       const time = Date.now() / 1000;
       const speed = effects.animationSpeed;
       const intensity = effects.animationIntensity / 100;
 
-      if (effects.animationType === 'float') animY += Math.sin(time * speed) * 15 * intensity;
-      else if (effects.animationType === 'pulse') animScale += Math.sin(time * speed) * 0.15 * intensity;
+      if (effects.animationType === 'float') animYOffset += Math.sin(time * speed) * 20 * intensity;
+      else if (effects.animationType === 'pulse') animScale += Math.sin(time * speed) * 0.2 * intensity;
       else if (effects.animationType === 'spin') animRotate = time * speed * 30 * intensity;
       else if (effects.animationType === 'jitter') {
-        animX += (Math.random() - 0.5) * 10 * intensity;
-        animY += (Math.random() - 0.5) * 10 * intensity;
+        animXOffset += (Math.random() - 0.5) * 12 * intensity;
+        animYOffset += (Math.random() - 0.5) * 12 * intensity;
       }
-      else if (effects.animationType === 'bounce') animY -= Math.abs(Math.sin(time * speed)) * 30 * intensity;
+      else if (effects.animationType === 'bounce') animYOffset -= Math.abs(Math.sin(time * speed)) * 35 * intensity;
+      else if (effects.animationType === 'swing') animRotate = Math.sin(time * speed) * 15 * intensity;
     }
 
     const dw = sw * scaleFactor * animScale;
@@ -198,41 +203,57 @@ export async function upscaleAndEditImage(
         ctx.restore();
     }
 
-    // Enchantment Glint
+    // Enchantment Glint Logic
     if (effects.enchantmentGlint) {
         ctx.save();
         ctx.globalCompositeOperation = 'source-atop';
         const time = Date.now() / 1500;
         const grad = ctx.createLinearGradient(0, 0, targetSize, targetSize);
         grad.addColorStop((time % 1), 'rgba(128, 0, 255, 0)');
-        grad.addColorStop(((time + 0.1) % 1), 'rgba(200, 100, 255, 0.6)');
-        grad.addColorStop(((time + 0.2) % 1), 'rgba(128, 0, 255, 0)');
+        grad.addColorStop(((time + 0.15) % 1), 'rgba(180, 80, 255, 0.7)');
+        grad.addColorStop(((time + 0.3) % 1), 'rgba(128, 0, 255, 0)');
         ctx.fillStyle = grad;
         ctx.fillRect(0,0,targetSize,targetSize);
         ctx.restore();
+    }
+
+    // ASCII Art Mode Simulation
+    if (effects.asciiMode) {
+        const data = ctx.getImageData(0,0,targetSize,targetSize);
+        ctx.fillStyle = 'black'; ctx.fillRect(0,0,targetSize,targetSize);
+        ctx.font = 'bold 8px monospace';
+        const chars = '@#S%?*+;:,.. ';
+        const step = 8;
+        for(let y=0; y<targetSize; y+=step) {
+            for(let x=0; x<targetSize; x+=step) {
+                const i = (y * targetSize + x) * 4;
+                const brightness = (data.data[i] + data.data[i+1] + data.data[i+2]) / 3;
+                const char = chars[Math.floor((brightness/255) * (chars.length-1))];
+                ctx.fillStyle = `rgb(${data.data[i]}, ${data.data[i+1]}, ${data.data[i+2]})`;
+                ctx.fillText(char, x, y);
+            }
+        }
     }
 
     // Creeper Face Overlay
     if (effects.creeperOverlay) {
         ctx.save();
         ctx.globalCompositeOperation = 'source-atop';
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-        const unit = targetSize / 10;
-        // Eyes
-        ctx.fillRect(unit*2, unit*2, unit*2, unit*2);
-        ctx.fillRect(unit*6, unit*2, unit*2, unit*2);
-        // Nose/Mouth
-        ctx.fillRect(unit*4, unit*4, unit*2, unit*3);
-        ctx.fillRect(unit*3, unit*5, unit*1, unit*3);
-        ctx.fillRect(unit*6, unit*5, unit*1, unit*3);
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+        const u = targetSize / 10;
+        ctx.fillRect(u*2, u*2, u*2, u*2);
+        ctx.fillRect(u*6, u*2, u*2, u*2);
+        ctx.fillRect(u*4, u*4, u*2, u*3);
+        ctx.fillRect(u*3, u*5, u*1, u*3);
+        ctx.fillRect(u*6, u*5, u*1, u*3);
         ctx.restore();
     }
 
     if (effects.crtEffect) {
         ctx.save();
-        ctx.globalAlpha = 0.2;
+        ctx.globalAlpha = 0.25;
         ctx.fillStyle = '#000';
-        for (let i=0; i<targetSize; i+=4) ctx.fillRect(0, i, targetSize, 1);
+        for (let i=0; i<targetSize; i+=3) ctx.fillRect(0, i, targetSize, 1);
         ctx.restore();
     }
 

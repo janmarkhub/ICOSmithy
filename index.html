@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Win11 Ico Toolkit</title>
+    <title>ICOSmithy</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
@@ -25,23 +25,45 @@
         25% { transform: translate(-2px, 2px) rotate(-2deg); }
         75% { transform: translate(2px, -2px) rotate(2deg); }
     }
+    @keyframes error-shake {
+        0%, 100% { transform: translate(0, 0); }
+        10%, 30%, 50%, 70%, 90% { transform: translate(-4px, 0); }
+        20%, 40%, 60%, 80% { transform: translate(4px, 0); }
+    }
     @keyframes mosh-swing {
         0% { transform: rotate(-5deg); }
         50% { transform: rotate(5deg); }
         100% { transform: rotate(-5deg); }
     }
     @keyframes mosh-sparkle {
-        0% { filter: brightness(1); }
-        50% { filter: brightness(2) contrast(1.5); }
-        100% { filter: brightness(1); }
+        0% { filter: brightness(1) drop-shadow(0 0 0px #fff); }
+        50% { filter: brightness(1.8) contrast(1.2) drop-shadow(0 0 10px #fff); }
+        100% { filter: brightness(1) drop-shadow(0 0 0px #fff); }
     }
     @keyframes mosh-float {
         0%, 100% { transform: translateY(0); }
         50% { transform: translateY(-10px); }
     }
+    @keyframes cauldron-mix {
+        0% { transform: rotate(0deg) scale(1) skew(0); }
+        33% { transform: rotate(5deg) scale(1.05) skew(2deg); }
+        66% { transform: rotate(-5deg) scale(0.95) skew(-2deg); }
+        100% { transform: rotate(0deg) scale(1) skew(0); }
+    }
+    @keyframes bubble-up {
+        0% { transform: translateY(10px) scale(0); opacity: 0; }
+        50% { opacity: 1; }
+        100% { transform: translateY(-40px) scale(1.8); opacity: 0; }
+    }
+    
     .animate-mosh-shake { animation: mosh-shake 0.2s infinite; }
+    /* Shakes once then stays static */
+    .animate-error-shake { animation: error-shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
     .animate-mosh-swing { animation: mosh-swing 1s ease-in-out infinite; }
-    .animate-mosh-sparkle { animation: mosh-sparkle 0.5s ease-in-out infinite; }
+    /* Sparkle only applies to class, we control when it's added (on hover) */
+    .animate-mosh-sparkle { animation: mosh-sparkle 1s ease-in-out infinite; }
+    .animate-cauldron-mix { animation: cauldron-mix 2s ease-in-out infinite; }
+    .animate-bubble-up { animation: bubble-up 1.2s ease-out infinite; }
     
     .pixelated { image-rendering: pixelated; }
     
@@ -68,6 +90,14 @@
         border-width: 8px 8px 0;
         border-style: solid;
         border-color: #000 transparent;
+    }
+
+    .smith-select {
+        appearance: none;
+        background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+        background-repeat: no-repeat;
+        background-position: right 0.5rem center;
+        background-size: 1em;
     }
 </style>
 </head>

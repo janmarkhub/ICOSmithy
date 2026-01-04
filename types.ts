@@ -100,7 +100,6 @@ export interface BatchEffects {
   removeBackground: boolean;
   normalizeInputs: boolean;
   smartUpscaleIntensity: number;
-  // Animation settings
   isAnimated: boolean;
   animationType: 'float' | 'pulse' | 'spin' | 'jitter' | 'bounce' | 'wave' | 'glitch' | 'swing';
   animationSpeed: number;
@@ -108,11 +107,12 @@ export interface BatchEffects {
   animationFrameCount: number;
   animationFrameMode: 'linear' | 'random' | 'vicinity';
   animationVicinityRange: number;
-  // New Procedural Effects
   asciiMode: boolean;
   enchantmentGlint: boolean;
   crtEffect: boolean;
   creeperOverlay: boolean;
+  sepiaTone: number;
+  blurIntensity: number;
 }
 
 export interface DesktopAssignments {
@@ -122,4 +122,25 @@ export interface DesktopAssignments {
   startButtonNormal?: string;
   startButtonHover?: string;
   startButtonClick?: string;
+  controlPanel?: string;
+  network?: string;
+  account?: string;
+  folder?: string;
+  extra1?: string;
+  extra2?: string;
+  extra3?: string;
+}
+
+export interface PersonBio {
+  name: string;
+  knownFor: string;
+  vibe: string;
+  wallpaperColors: string[];
+}
+
+export interface GeneratedPackItem {
+  label: string;
+  prompt: string;
+  blob?: Blob;
+  previewUrl?: string;
 }

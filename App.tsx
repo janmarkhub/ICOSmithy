@@ -7,13 +7,14 @@ import { Gallery } from './components/Gallery';
 import { EffectsPanel } from './components/EffectsPanel';
 import { StickerClipboard } from './components/StickerClipboard';
 import { Desktop } from './components/Desktop';
-import { ProcessedFile, Resolution, ExportFormat, CustomSticker, StickerTexture, BatchEffects, DesktopAssignments } from './types';
+import { Cauldron } from './components/Cauldron';
+import { FloatingHelp } from './components/FloatingHelp';
+import { ProcessedFile, Resolution, ExportFormat, CustomSticker, StickerTexture, BatchEffects, DesktopAssignments, GeneratedPackItem } from './types';
 import { parseIcoAndGetLargestImage } from './utils/icoParser';
 import { upscaleAndEditImage, DEFAULT_EFFECTS, calculateFidelity } from './utils/imageProcessor';
 import { wrapPngInIco } from './utils/icoEncoder';
-import { removeBackgroundAI, generateThemeSetSuggestions, generateStickerAI, getEffectRecommendation } from './utils/aiVision';
-// Added missing Monitor and Stars icons to solve reference errors on line 198 and 235
-import { MousePointer2, Zap, Eye, EyeOff, Globe, Sparkles, Moon, Sun, Loader2, Scissors, Info, X, Layout, FileWarning, Hammer, Wand2, Monitor, Stars } from 'lucide-react';
+import { generateStickerAI, getEffectRecommendation } from './utils/aiVision';
+import { Hammer, Wand2, Monitor, Stars, AlertTriangle, HelpCircle, Coffee, Layout, Sun, Moon, FileWarning } from 'lucide-react';
 
 declare var JSZip: any;
 declare var saveAs: any;
@@ -28,7 +29,7 @@ interface FileSource {
 
 const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState(true);
-  const [mode, setMode] = useState<'upscale' | 'test' | 'theme'>('upscale');
+  const [mode, setMode] = useState<'upscale' | 'test' | 'cauldron'>('upscale');
   const [files, setFiles] = useState<ProcessedFile[]>([]);
   const [resolution, setResolution] = useState<Resolution>(Resolution.FHD);
   const [exportFormat, setExportFormat] = useState<ExportFormat>(ExportFormat.ICO);
@@ -39,6 +40,7 @@ const App: React.FC = () => {
   const [desktopAssignments, setDesktopAssignments] = useState<DesktopAssignments>({});
   const [showAnimationNotice, setShowAnimationNotice] = useState(false);
   const [lastAction, setLastAction] = useState<string | null>(null);
+  const [errorInfo, setErrorInfo] = useState<{ msg: string, fix: string } | null>(null);
 
   const sourceCache = useRef<Map<string, FileSource>>(new Map());
 
@@ -57,7 +59,7 @@ const App: React.FC = () => {
       } catch (err) { return file; }
     }));
     setFiles(updatedFiles);
-    triggerGratification('Reforged');
+    triggerGratification('Loot Reforged');
   }, [effects, resolution, exportFormat, files.length]);
 
   const triggerGratification = (action: string) => {
@@ -69,12 +71,6 @@ const App: React.FC = () => {
     const timer = setTimeout(applyEffectsToFiles, 300);
     return () => clearTimeout(timer);
   }, [effects, resolution, exportFormat, files.length]);
-
-  useEffect(() => {
-    if (effects.isAnimated && exportFormat === ExportFormat.ICO) {
-      setShowAnimationNotice(true);
-    }
-  }, [effects.isAnimated, exportFormat]);
 
   const handleFilesSelected = useCallback(async (selectedFiles: File[]) => {
     setIsProcessing(true);
@@ -88,54 +84,61 @@ const App: React.FC = () => {
         } else {
           rawBlob = file;
         }
-
         const rawUrl = URL.createObjectURL(rawBlob);
         const tempImg = new Image();
         await new Promise(res => { tempImg.onload = res; tempImg.src = rawUrl; });
-        
         const fidelity = calculateFidelity(tempImg);
         sourceCache.current.set(id, { id, image: tempImg, rawUrl, fidelity });
-        
         const initialPng = await upscaleAndEditImage(tempImg, resolution, effects, undefined, fidelity);
         newFiles.push({
           id, originalName: file.name, newName: file.name.replace(/\.[^/.]+$/, "") + "." + exportFormat,
           blob: initialPng, previewUrl: URL.createObjectURL(initialPng), status: 'completed' as const, width: resolution, height: resolution,
           originalType: file.type, fidelityScore: fidelity
         });
-        
-        if (newFiles.length === 1) {
-            getEffectRecommendation("").then(setRecommendation);
-        }
-      } catch (e) { console.error(e); }
+      } catch (e) { 
+        setErrorInfo({ 
+            msg: `Failed to process image: ${file.name}`, 
+            fix: "This image might be corrupt or an unsupported bit depth. WAT DO? Try opening it in Paint, saving as a fresh PNG, and dropping it back in."
+        });
+      }
     }
     setFiles(prev => [...newFiles, ...prev]);
     setIsProcessing(false);
-    triggerGratification('Loot Acquired');
+    triggerGratification('Items Found');
   }, [resolution, effects, exportFormat]);
 
-  const handleStickerGen = async (type: string) => {
-    const promptValue = window.prompt(`Describe the ${type} magic item:`);
-    if (!promptValue) return;
+  const handleImportPackToSmithy = useCallback(async (pack: GeneratedPackItem[]) => {
     setIsProcessing(true);
-    try {
-        const url = await generateStickerAI(type, promptValue);
-        const s: CustomSticker = { id: crypto.randomUUID(), url, x: 50, y: 50, scale: 30, rotation: 0, texture: 'none' };
-        setEffects(prev => ({ ...prev, customStickers: [...prev.customStickers, s] }));
-        triggerGratification('Summoned Item');
-    } catch(e) { console.error(e); }
+    const newFiles = [];
+    for (const item of pack) {
+      const id = crypto.randomUUID();
+      if (!item.blob) continue;
+      
+      const tempImg = new Image();
+      const url = URL.createObjectURL(item.blob);
+      await new Promise(res => { tempImg.onload = res; tempImg.src = url; });
+      
+      const fidelity = 100; // Generated icons are high quality
+      sourceCache.current.set(id, { id, image: tempImg, rawUrl: url, fidelity });
+      
+      const initialPng = await upscaleAndEditImage(tempImg, resolution, effects, undefined, fidelity);
+      newFiles.push({
+        id, originalName: `${item.label}.png`, newName: `${item.label}.${exportFormat}`,
+        blob: initialPng, previewUrl: URL.createObjectURL(initialPng), status: 'completed' as const, width: resolution, height: resolution,
+        originalType: 'image/png', fidelityScore: fidelity
+      });
+    }
+    setFiles(prev => [...newFiles, ...prev]);
     setIsProcessing(false);
-  };
-
-  const handleAssignToDesktop = (slot: keyof DesktopAssignments, fileId: string) => {
-    setDesktopAssignments(prev => ({ ...prev, [slot]: fileId }));
-    triggerGratification('Slot Assigned');
-  };
+    setMode('upscale');
+    triggerGratification('Pack Imported');
+  }, [resolution, effects, exportFormat]);
 
   const handleDownloadZip = useCallback(() => {
     const zip = new (window as any).JSZip();
     files.filter(f => f.status === 'completed').forEach(file => zip.file(file.newName, file.blob));
     zip.generateAsync({ type: "blob" }).then((content: Blob) => {
-      (window as any).saveAs(content, `Win11Toolkit_Collection.zip`);
+      (window as any).saveAs(content, `ICOSmithy_Export.zip`);
     });
     triggerGratification('Stash Exported');
   }, [files]);
@@ -143,126 +146,90 @@ const App: React.FC = () => {
   return (
     <div className={`min-h-screen transition-all duration-500 font-mono ${isDarkMode ? 'bg-[#111] text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
       
-      {/* Toast Notification for Gratification */}
       {lastAction && (
-        <div className="fixed top-10 right-10 z-[300] bg-yellow-400 border-4 border-black p-4 shadow-[10px_10px_0px_rgba(0,0,0,0.5)] flex items-center gap-3 animate-in slide-in-from-right-10">
+        <div className="fixed top-12 right-12 z-[2000] bg-yellow-400 border-4 border-black p-4 shadow-[12px_12px_0px_rgba(0,0,0,0.6)] flex items-center gap-4 animate-in slide-in-from-right-12">
           <Wand2 size={24} className="text-black animate-spin-slow" />
           <span className="text-black font-bold uppercase text-lg tracking-tighter drop-shadow-sm">{lastAction}!</span>
         </div>
       )}
 
-      <div className="max-w-6xl mx-auto px-4 py-8 relative">
-        <div className="flex justify-between items-center mb-8">
-            <Header />
-            <div className="flex items-center gap-4">
-               <button 
-                onClick={() => setIsDarkMode(!isDarkMode)} 
-                className="p-3 bg-[#c6c6c6] border-4 border-t-[#ffffff] border-l-[#ffffff] border-r-[#555555] border-b-[#555555] shadow-lg hover:scale-110 active:scale-95 transition-all group"
-              >
-                  {isDarkMode ? <Sun className="text-amber-500 group-hover:rotate-45 transition-transform" size={24} /> : <Moon className="text-indigo-600 group-hover:-rotate-45 transition-transform" size={24} />}
-              </button>
+      {errorInfo && (
+        <div className="fixed inset-0 z-[5000] bg-black/90 flex items-center justify-center p-6 backdrop-blur-md">
+            <div className="w-full max-w-xl bg-[#c6c6c6] border-8 border-red-600 p-8 shadow-2xl animate-error-shake">
+                <div className="flex items-center gap-5 mb-6 text-red-700">
+                    <AlertTriangle size={48} />
+                    <h2 className="text-3xl font-black uppercase tracking-tighter leading-none">SMITHY FAILURE!</h2>
+                </div>
+                <div className="bg-black/10 border-4 border-black/20 p-5 mb-8">
+                    <p className="text-sm text-red-900 font-bold uppercase tracking-tight leading-relaxed">{errorInfo.msg}</p>
+                </div>
+                <div className="bg-white p-6 border-4 border-black mb-8">
+                    <div className="flex items-center gap-3 mb-4 text-indigo-700">
+                        <HelpCircle size={24} />
+                        <h3 className="text-lg font-black uppercase italic">WAT DO?</h3>
+                    </div>
+                    <p className="text-xs text-slate-800 font-bold leading-relaxed uppercase">{errorInfo.fix}</p>
+                </div>
+                <button onClick={() => setErrorInfo(null)} className="w-full py-5 bg-red-600 text-white font-black uppercase text-xl border-4 border-red-900 hover:bg-red-500 shadow-xl transition-all">OK, FIXING IT NOW</button>
             </div>
         </div>
+      )}
 
-        <main className="max-w-4xl mx-auto">
-          {/* Main Navigation tabs Minecraft Style */}
-          <div className="flex justify-center gap-1 mb-10">
-              <button 
-                onClick={() => setMode('upscale')} 
-                className={`px-8 py-3 text-xs font-bold border-4 uppercase tracking-widest transition-all
-                  ${mode === 'upscale' 
-                    ? 'bg-[#8b8b8b] border-t-[#ffffff] border-l-[#ffffff] border-r-[#555555] border-b-[#555555] text-white shadow-[6px_6px_0_rgba(0,0,0,0.5)] translate-y-2' 
-                    : 'bg-[#555555] border-t-[#8b8b8b] border-l-[#8b8b8b] border-r-[#222] border-b-[#222] text-[#888] hover:bg-[#666] hover:-translate-y-1'
-                  }
-                `}
-              >
-                The Forge
-              </button>
-              <button 
-                onClick={() => setMode('test')} 
-                className={`px-8 py-3 text-xs font-bold border-4 uppercase tracking-widest transition-all
-                  ${mode === 'test' 
-                    ? 'bg-[#8b8b8b] border-t-[#ffffff] border-l-[#ffffff] border-r-[#555555] border-b-[#555555] text-white shadow-[6px_6px_0_rgba(0,0,0,0.5)] translate-y-2' 
-                    : 'bg-[#555555] border-t-[#8b8b8b] border-l-[#8b8b8b] border-r-[#222] border-b-[#222] text-[#888] hover:bg-[#666] hover:-translate-y-1'
-                  }
-                `}
-              >
-                Desktop Sim
-              </button>
+      <div className="max-w-7xl mx-auto px-6 py-10 relative">
+        <div className="flex justify-between items-center mb-10">
+            <Header />
+            <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-4 bg-[#c6c6c6] border-4 border-t-[#ffffff] border-l-[#ffffff] border-r-[#555555] border-b-[#555555] shadow-xl hover:scale-110 active:scale-95 transition-all">
+                {isDarkMode ? <Sun className="text-amber-500" size={28} /> : <Moon className="text-indigo-600" size={28} />}
+            </button>
+        </div>
+
+        <main className="max-w-5xl mx-auto">
+          <div className="flex justify-center gap-3 mb-12">
+              {[
+                { id: 'upscale', label: 'The Smithy', icon: Hammer },
+                { id: 'cauldron', label: 'The Cauldron', icon: Coffee },
+                { id: 'test', label: 'Desktop Forge', icon: Monitor }
+              ].map(tab => (
+                <button 
+                  key={tab.id}
+                  onClick={() => setMode(tab.id as any)} 
+                  className={`px-8 py-4 text-sm font-black border-4 uppercase tracking-widest transition-all flex items-center gap-3
+                    ${mode === tab.id 
+                      ? 'bg-[#8b8b8b] border-t-[#ffffff] border-l-[#ffffff] border-r-[#555555] border-b-[#555555] text-white shadow-[8px_8px_0_rgba(0,0,0,0.5)] translate-y-1' 
+                      : 'bg-[#555555] border-t-[#8b8b8b] border-l-[#8b8b8b] border-r-[#222] border-b-[#222] text-[#888] hover:bg-[#666] hover:-translate-y-1'
+                    }
+                  `}
+                >
+                  <tab.icon size={18}/> {tab.label}
+                </button>
+              ))}
           </div>
 
-          {mode === 'test' ? (
-            <div className="animate-in fade-in zoom-in duration-300">
-               <div className="bg-[#c6c6c6] border-8 border-t-[#ffffff] border-l-[#ffffff] border-r-[#555555] border-b-[#555555] p-8 rounded-sm shadow-2xl relative">
-                 <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-xl font-bold text-[#111] uppercase drop-shadow-[1px_1px_0_white] flex items-center gap-3">
-                        <Monitor size={24}/> Virtual Desktop Workspace
-                    </h2>
-                    <div className="flex gap-2">
-                      <div className="bg-[#555] px-4 py-1.5 border-4 border-white text-[10px] text-white uppercase font-bold animate-pulse">Live Visualizer</div>
-                    </div>
-                 </div>
-                 <Desktop files={files} assignments={desktopAssignments} onAssign={handleAssignToDesktop} />
-                 <div className="mt-8 p-5 bg-[#333] border-4 border-t-[#111] border-l-[#111] border-r-[#555] border-b-[#555] flex items-start gap-4 shadow-inner">
-                    <Zap size={24} className="text-yellow-400 shrink-0" />
-                    <div>
-                        <p className="text-[11px] text-white font-bold uppercase tracking-widest leading-relaxed">
-                            Pro-Tip: Right-click any icon on the virtual desktop to assign multiple states (Empty/Full, Hover/Click). Use the visualization toolkit to test movement!
-                        </p>
-                    </div>
-                 </div>
+          {mode === 'cauldron' ? (
+            <Cauldron 
+                onPackGenerated={(pack) => triggerGratification('Pack Brewed')} 
+                onImportToSmithy={handleImportPackToSmithy}
+                onError={(msg, fix) => setErrorInfo({msg, fix})} 
+            />
+          ) : mode === 'test' ? (
+            <div className="bg-[#c6c6c6] border-8 border-t-[#ffffff] border-l-[#ffffff] border-r-[#555555] border-b-[#555555] p-10 rounded-sm shadow-2xl relative animate-in fade-in zoom-in duration-300">
+               <div className="flex justify-between items-center mb-8 border-b-4 border-black/10 pb-4">
+                  <h2 className="text-2xl font-black text-[#111] uppercase flex items-center gap-4"><Monitor size={32}/> Deployment Simulator</h2>
+                  <div className="flex gap-4">
+                    <button className="px-4 py-2 bg-indigo-600 text-white border-4 border-white text-[9px] font-black uppercase hover:bg-indigo-500 transition-all">Inspire Me</button>
+                  </div>
                </div>
+               <Desktop files={files} assignments={desktopAssignments} onAssign={(s, id) => setDesktopAssignments(prev => ({ ...prev, [s]: id }))} onError={(msg, fix) => setErrorInfo({msg, fix})} />
             </div>
           ) : (
-            <div className="space-y-8 animate-in fade-in duration-300">
-              {showAnimationNotice && (
-                <div className="bg-amber-600 border-4 border-white p-5 rounded-sm flex items-center justify-between gap-6 shadow-2xl animate-mosh-shake">
-                  <div className="flex items-center gap-4">
-                    <FileWarning size={32} className="text-white" />
-                    <div>
-                      <p className="text-xs font-bold text-white uppercase tracking-widest">Incompatible Format Detected!</p>
-                      <p className="text-[10px] text-white/90 uppercase font-bold leading-tight mt-1">Movement effects are active. ICO files are static images. Switch to GIF export for full animation support.</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-3">
-                    <button onClick={() => {setExportFormat(ExportFormat.GIF); setShowAnimationNotice(false);}} className="bg-white text-amber-700 px-5 py-2 text-[10px] font-bold uppercase border-4 border-amber-900 shadow-md hover:scale-105">Switch to GIF</button>
-                    <button onClick={() => setShowAnimationNotice(false)} className="text-white hover:rotate-90 transition-transform"><X size={24}/></button>
-                  </div>
-                </div>
-              )}
-
-              {recommendation && (
-                <div className="bg-indigo-900/40 border-4 border-indigo-400/50 p-5 rounded-sm flex items-start gap-4 shadow-lg">
-                    <Stars size={24} className="text-indigo-300 mt-1 shrink-0 animate-mosh-sparkle" />
-                    <div className="flex-1">
-                        <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest mb-1">Enchanter's Secret Lore</p>
-                        <p className="text-sm text-slate-300 italic leading-relaxed">"{recommendation}"</p>
-                    </div>
-                    <button onClick={() => setRecommendation(null)} className="text-slate-500 hover:text-white"><X size={16}/></button>
-                </div>
-              )}
-
-              <EffectsPanel effects={effects} setEffects={setEffects} disabled={isProcessing} onUndo={() => {}} canUndo={false} />
-              
-              <Controls 
-                  resolution={resolution} setResolution={setResolution} 
-                  exportFormat={exportFormat} setExportFormat={setExportFormat} 
-                  onDownload={handleDownloadZip} onReset={() => {setFiles([]); triggerGratification('Wiped');}} 
-                  isProcessing={isProcessing} canDownload={files.length > 0} 
-              />
-              
+            <div className="space-y-10 animate-in fade-in duration-300">
+              <EffectsPanel effects={effects} setEffects={setEffects} disabled={isProcessing} onUndo={() => {}} canUndo={false} onError={(msg, fix) => setErrorInfo({ msg, fix })} />
+              <Controls resolution={resolution} setResolution={setResolution} exportFormat={exportFormat} setExportFormat={setExportFormat} onDownload={handleDownloadZip} onReset={() => setFiles([])} isProcessing={isProcessing} canDownload={files.length > 0} />
               <DropZone onFilesSelected={handleFilesSelected} />
-              
-              <div className="mt-8">
-                  <div className="flex items-center justify-between mb-4 border-b-4 border-white/10 pb-3">
-                    <h3 className="text-sm font-bold uppercase tracking-widest text-slate-500 flex items-center gap-3">
-                      <Layout size={18} className="text-indigo-400"/> Output Stash
-                    </h3>
-                    <div className="flex gap-3">
-                        <button onClick={() => setShowComparison(!showComparison)} className="bg-[#333] border-4 border-[#555] px-4 py-1.5 text-[10px] uppercase font-bold text-white hover:bg-white/10 transition-all">
-                          {showComparison ? "Gallery View" : "Compare Bits"}
-                        </button>
-                    </div>
+              <div className="mt-12">
+                  <div className="flex items-center justify-between mb-6 border-b-4 border-white/10 pb-4">
+                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-500 flex items-center gap-4"><Layout size={20} className="text-indigo-400"/> Inventory</h3>
+                    <button onClick={() => setShowComparison(!showComparison)} className="bg-[#333] border-4 border-[#555] px-6 py-2 text-[11px] uppercase font-bold text-white hover:bg-white/10 transition-all">{showComparison ? "Gallery" : "Comparison"}</button>
                   </div>
                   <Gallery files={files} comparisonMode={showComparison} sources={sourceCache.current} />
               </div>
@@ -270,26 +237,11 @@ const App: React.FC = () => {
           )}
         </main>
 
-        <StickerClipboard 
-            stickers={effects.customStickers} 
-            processedIcons={files.filter(f => f.status === 'completed')}
-            onAddSticker={(url) => {
-                const s: CustomSticker = { id: crypto.randomUUID(), url, x: 50, y: 50, scale: 30, rotation: 0, texture: 'none' };
-                setEffects(prev => ({ ...prev, customStickers: [...prev.customStickers, s] }));
-            }}
-            onRemoveSticker={(id) => setEffects(prev => ({ ...prev, customStickers: prev.customStickers.filter(s => s.id !== id) }))}
-            onBatchApply={() => {}}
-            onGenerate={handleStickerGen}
-            onApplyTexture={(id, tex) => setEffects(prev => ({ ...prev, customStickers: prev.customStickers.map(s => s.id === id ? { ...s, texture: tex } : s) }))}
-        />
+        <StickerClipboard stickers={effects.customStickers} processedIcons={files.filter(f => f.status === 'completed')} onAddSticker={(url) => setEffects(prev => ({ ...prev, customStickers: [...prev.customStickers, { id: crypto.randomUUID(), url, x: 50, y: 50, scale: 30, rotation: 0, texture: 'none' }] }))} onRemoveSticker={(id) => setEffects(prev => ({ ...prev, customStickers: prev.customStickers.filter(s => s.id !== id) }))} onBatchApply={() => {}} onGenerate={() => {}} onApplyTexture={(id, tex) => setEffects(prev => ({ ...prev, customStickers: prev.customStickers.map(s => s.id === id ? { ...s, texture: tex } : s) }))} />
+        <FloatingHelp onNav={(p) => setMode(p)} />
 
-        <footer className="mt-20 text-center text-slate-600 text-[10px] border-t border-white/5 pt-10 pb-16 tracking-[0.4em] uppercase font-bold flex flex-col items-center gap-3">
-          <div className="flex gap-6 opacity-30">
-            <span className="flex items-center gap-2"><Hammer size={12}/> Block Smithy v6.2</span>
-            <span>&bull;</span>
-            <span className="flex items-center gap-2"><Sparkles size={12}/> Enchanted Toolkit</span>
-          </div>
-          <p>&copy; {new Date().getFullYear()} Win11 Ico Toolkit &bull; Crafting the Future Pixel by Pixel</p>
+        <footer className="mt-24 text-center text-slate-600 text-[11px] border-t border-white/5 pt-12 pb-20 tracking-[0.5em] uppercase font-bold flex flex-col items-center gap-4 opacity-30">
+          <p>&copy; {new Date().getFullYear()} ICOSmithy &bull; Built in the Forge</p>
         </footer>
       </div>
     </div>
