@@ -38,7 +38,7 @@ export const Gallery: React.FC<GalleryProps> = ({ files, comparisonMode, sources
             )}
             
             <div className="flex flex-col">
-              <div className={`relative aspect-square ${isSelected ? 'bg-indigo-900/20' : 'bg-[#8b8b8b]'} flex items-center justify-center overflow-hidden border-b-4 border-[#555555]`}>
+              <div className={`relative aspect-square ${isSelected ? 'bg-indigo-900/20' : 'transparent-checker'} flex items-center justify-center overflow-hidden border-b-4 border-[#555555]`}>
                 {file.status === 'processing' ? (
                   <Loader2 size={24} className="text-white animate-spin" />
                 ) : file.status === 'error' ? (
@@ -55,7 +55,7 @@ export const Gallery: React.FC<GalleryProps> = ({ files, comparisonMode, sources
                               />
                               <span className="absolute bottom-1 left-1 bg-black/60 text-[6px] text-white px-1 uppercase rounded">Old</span>
                           </div>
-                          <div className="w-1/2 h-full relative overflow-hidden bg-[#8b8b8b]">
+                          <div className="w-1/2 h-full relative overflow-hidden transparent-checker">
                                <img 
                                   src={file.previewUrl} 
                                   className="w-full h-full object-contain p-2 transition-transform group-hover:scale-110"

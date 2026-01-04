@@ -59,15 +59,28 @@ export async function getPersonProfile(name: string): Promise<PersonBio | null> 
 }
 
 export async function generatePackPrompts(source: string, category: string, style: string): Promise<{ items: GeneratedPackItem[], masterPrompt: string }> {
+  // Use Search Grounding to ensure lore/reality accuracy
+  const groundingResponse = await ai.models.generateContent({
+    model: "gemini-3-flash-preview",
+    contents: `Explain what the most iconic visual assets for "${source}" (${category}) look like in detail. Focus on shapes, specific colors, and key defining features used in the source material.`,
+    config: {
+      tools: [{googleSearch: {}}],
+    },
+  });
+  
+  const groundedContext = groundingResponse.text;
+
   const response = await ai.models.generateContent({
     model: "gemini-3-pro-preview",
     contents: `We are creating a 10-icon desktop theme for "${source}" (${category}) in "${style}" style. 
-    The 10 icons are: 1. Recycle Bin Empty, 2. Recycle Bin Full, 3. Start Button, 4. My PC, 5. Control Panel, 6. Network, 7. Account, 8. Folder, 9. Themed Asset A, 10. Themed Asset B.
+    Context from research: ${groundedContext}
+    
+    The 10 icons are: 1. Recycle Bin Empty, 2. Recycle Bin Full, 3. Start Button, 4. My PC, 5. Control Panel, 6. Network, 7. Account, 8. Folder, 9. Primary Theme Asset, 10. Secondary Theme Asset.
     
     TASK:
-    1. Provide a short label for each.
-    2. Provide a single 'masterPrompt' for a 4x3 grid (sprite sheet) containing these 10 icons in sequence.
-    The description should tell the AI to generate 10 distinct, centered squares on a plain neutral background.
+    1. Provide a short label for each icon based on the specific source "${source}".
+    2. Provide a single 'masterPrompt' for a 5x2 sprite sheet (5 columns, 2 rows).
+    CRITICAL: The prompt must explicitly describe a grid of 10 distinct, perfectly centered squares on a PURE FLAT WHITE background (#FFFFFF). Each icon should occupy only the center 60% of its cell. NO shading between icons.
     Return as JSON: { "items": [{ "label": "..." }], "masterPrompt": "..." }`,
     config: {
       responseMimeType: "application/json",
@@ -97,7 +110,7 @@ export async function generateIconGrid(masterPrompt: string): Promise<string> {
     model: 'gemini-2.5-flash-image',
     contents: {
       parts: [
-        { text: `Create a high-quality sprite sheet grid of 12 squares (4 columns, 3 rows). Inside each square is a centered app icon. Total 10 unique icons following this theme: ${masterPrompt}. High contrast, solid plain background, professional, clean design.` }
+        { text: `Create a professional icon sprite sheet. 2 rows, 5 columns. 10 unique icons. THEME: ${masterPrompt}. BACKGROUND: Solid flat #FFFFFF white. Each icon must be centered in its grid cell with large margins around it. Style must be consistent across all 10 icons.` }
       ]
     },
     config: { imageConfig: { aspectRatio: "1:1" } }
@@ -114,7 +127,7 @@ export async function generateIconImage(prompt: string): Promise<string> {
     model: 'gemini-2.5-flash-image',
     contents: {
       parts: [
-        { text: `Create a single high-quality app icon for: ${prompt}. Solid background color (will be removed later). Professional, clean design, centered.` }
+        { text: `Create a single high-quality app icon for: ${prompt}. PURE FLAT WHITE #FFFFFF background. Professional, clean design, centered.` }
       ]
     },
     config: { imageConfig: { aspectRatio: "1:1" } }
@@ -127,7 +140,7 @@ export async function generateIconImage(prompt: string): Promise<string> {
 }
 
 export async function generateStickerAI(type: string, userPrompt: string, base64Ref?: string): Promise<string> {
-  const instruction = `Create a stylized sticker for ${userPrompt}. Type: ${type}. High contrast, bold colors, white thick border, gaming/pop-art aesthetic. Transparent background.`;
+  const instruction = `Create a stylized sticker for ${userPrompt}. Type: ${type}. High contrast, bold colors, white thick border, gaming/pop-art aesthetic. Pure flat white background.`;
   const contents: any = { parts: [{ text: instruction }] };
   if (base64Ref) {
     contents.parts.push({ inlineData: { mimeType: 'image/png', data: base64Ref } });
@@ -141,17 +154,4 @@ export async function generateStickerAI(type: string, userPrompt: string, base64
     if (part.inlineData) return `data:image/png;base64,${part.inlineData.data}`;
   }
   throw new Error("Sticker generation failed");
-}
-
-export async function getEffectRecommendation(base64Image: string): Promise<string> {
-  const response = await ai.models.generateContent({
-    model: "gemini-3-flash-preview",
-    contents: {
-      parts: [
-        { inlineData: { mimeType: "image/png", data: base64Image } },
-        { text: "Recommend 3 specific Mosh Workbench effects for this image to make it look epic. Be creative." }
-      ]
-    }
-  });
-  return response.text || "Try adding RGB split and a thick white outline!";
 }

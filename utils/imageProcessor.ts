@@ -84,28 +84,74 @@ export function calculateFidelity(img: HTMLImageElement): number {
     return Math.min(100, Math.sqrt(area) / 1024 * 100);
 }
 
-function applyTexture(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, texture: StickerTexture) {
-  if (texture === 'none') return;
-  ctx.save();
-  ctx.globalCompositeOperation = 'overlay';
-  if (texture === 'foil') {
-    const grad = ctx.createLinearGradient(x, y, x + w, y + h);
-    grad.addColorStop(0, '#fff'); grad.addColorStop(0.5, '#888'); grad.addColorStop(1, '#fff');
-    ctx.fillStyle = grad; ctx.globalAlpha = 0.5; ctx.fillRect(x, y, w, h);
-  } else if (texture === 'holo') {
-    const grad = ctx.createLinearGradient(x, y, x + w, y + h);
-    for(let i=0; i<=1; i+=0.2) grad.addColorStop(i, `hsla(${i*360}, 70%, 50%, 0.4)`);
-    ctx.fillStyle = grad; ctx.fillRect(x, y, w, h);
-  } else if (texture === 'gold') {
-    ctx.fillStyle = 'rgba(255, 215, 0, 0.4)'; ctx.fillRect(x, y, w, h);
-  } else if (texture === 'realistic') {
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 1;
-    for(let i=0; i<3; i++) {
-        ctx.beginPath(); ctx.moveTo(x, y + Math.random()*h); ctx.lineTo(x+w, y + Math.random()*h); ctx.stroke();
+/**
+ * Robust alpha-scrubbing and content centering.
+ * Fixes "all over the place" icons by finding actual pixel bounds.
+ */
+export async function removeBgAndCenter(img: HTMLImageElement): Promise<Blob> {
+    const canvas = document.createElement('canvas');
+    canvas.width = img.width;
+    canvas.height = img.height;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+    ctx.drawImage(img, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    // Scrub white/near-white backgrounds
+    const t = 225; // Sensitivity
+    let minX = canvas.width, minY = canvas.height, maxX = 0, maxY = 0;
+    let hasContent = false;
+
+    for (let y = 0; y < canvas.height; y++) {
+        for (let x = 0; x < canvas.width; x++) {
+            const i = (y * canvas.width + x) * 4;
+            const r = data[i], g = data[i+1], b = data[i+2], a = data[i+3];
+            
+            // Content check: not transparent and not white
+            if (a > 10 && (r < t || g < t || b < t)) {
+                if (x < minX) minX = x; if (x > maxX) maxX = x;
+                if (y < minY) minY = y; if (y > maxY) maxY = y;
+                hasContent = true;
+            } else {
+                data[i+3] = 0; // Scrub
+            }
+        }
     }
-  }
-  ctx.restore();
+
+    // Fallback if the whole thing was white or empty
+    if (!hasContent) return new Promise((res) => canvas.toBlob(b => res(b!), 'image/png'));
+
+    // Bounding Box Logic for Centering
+    const contentW = maxX - minX + 1;
+    const contentH = maxY - minY + 1;
+    
+    // Ignore tiny fragments that might be noise from a sprite sheet slice
+    if (contentW < 10 || contentH < 10) return new Promise((res) => canvas.toBlob(b => res(b!), 'image/png'));
+
+    const final = document.createElement('canvas');
+    const size = Math.max(img.width, img.height);
+    final.width = size;
+    final.height = size;
+    const fctx = final.getContext('2d')!;
+
+    // Scaling to fit nicely with padding
+    const drawSize = size * 0.8;
+    const scale = Math.min(drawSize / contentW, drawSize / contentH);
+    
+    const dw = contentW * scale;
+    const dh = contentH * scale;
+    const dx = (size - dw) / 2;
+    const dy = (size - dh) / 2;
+
+    // Create a temporary content-only canvas
+    const temp = document.createElement('canvas');
+    temp.width = img.width; temp.height = img.height;
+    temp.getContext('2d')!.putImageData(imageData, 0, 0);
+
+    fctx.clearRect(0,0,size,size);
+    fctx.drawImage(temp, minX, minY, contentW, contentH, dx, dy, dw, dh);
+
+    return new Promise((res) => final.toBlob(b => res(b!), 'image/png'));
 }
 
 export async function upscaleAndEditImage(
@@ -128,8 +174,6 @@ export async function upscaleAndEditImage(
     canvas.width = targetSize; canvas.height = targetSize;
     const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
 
-    const localSharpness = effects.normalizeInputs ? Math.max(0, 100 - fidelityFactor) : 0;
-    
     let sx = 0, sy = 0, sw = img.width, sh = img.height;
     if (cropBox) {
       sy = (cropBox[0] / 1000) * img.height; sx = (cropBox[1] / 1000) * img.width;
@@ -149,7 +193,6 @@ export async function upscaleAndEditImage(
       const time = Date.now() / 1000;
       const speed = effects.animationSpeed;
       const intensity = effects.animationIntensity / 100;
-
       if (effects.animationType === 'float') animYOffset += Math.sin(time * speed) * 20 * intensity;
       else if (effects.animationType === 'pulse') animScale += Math.sin(time * speed) * 0.2 * intensity;
       else if (effects.animationType === 'spin') animRotate = time * speed * 30 * intensity;
@@ -171,18 +214,27 @@ export async function upscaleAndEditImage(
 
     const maskCanvas = document.createElement('canvas');
     maskCanvas.width = targetSize; maskCanvas.height = targetSize;
-    const mctx = maskCanvas.getContext('2d')!;
+    const mctx = maskCanvas.getContext('2d', { willReadFrequently: true })!;
     
     mctx.save();
     mctx.translate(targetSize/2, targetSize/2);
     mctx.rotate(animRotate * Math.PI / 180);
     mctx.translate(-targetSize/2, -targetSize/2);
-    
     if (effects.cornerRadius > 0) {
         mctx.beginPath(); mctx.roundRect(dx, dy, dw, dh, (effects.cornerRadius/100)*(dw/2)); mctx.clip();
     }
     mctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
     mctx.restore();
+
+    if (effects.removeBackground) {
+        const mData = mctx.getImageData(0,0,targetSize,targetSize);
+        const d = mData.data;
+        const t = 225; 
+        for (let i=0; i<d.length; i+=4) {
+            if (d[i] > t && d[i+1] > t && d[i+2] > t) d[i+3] = 0;
+        }
+        mctx.putImageData(mData, 0, 0);
+    }
 
     ctx.save();
     let filterStr = `brightness(${effects.brightness}%) contrast(${effects.contrast}%) saturate(${effects.saturation}%) hue-rotate(${effects.hueRotate}deg)`;
@@ -200,60 +252,6 @@ export async function upscaleAndEditImage(
             let a = (i * Math.PI) / 180;
             ctx.drawImage(maskCanvas, Math.cos(a)*thickness, Math.sin(a)*thickness);
         }
-        ctx.restore();
-    }
-
-    // Enchantment Glint Logic
-    if (effects.enchantmentGlint) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'source-atop';
-        const time = Date.now() / 1500;
-        const grad = ctx.createLinearGradient(0, 0, targetSize, targetSize);
-        grad.addColorStop((time % 1), 'rgba(128, 0, 255, 0)');
-        grad.addColorStop(((time + 0.15) % 1), 'rgba(180, 80, 255, 0.7)');
-        grad.addColorStop(((time + 0.3) % 1), 'rgba(128, 0, 255, 0)');
-        ctx.fillStyle = grad;
-        ctx.fillRect(0,0,targetSize,targetSize);
-        ctx.restore();
-    }
-
-    // ASCII Art Mode Simulation
-    if (effects.asciiMode) {
-        const data = ctx.getImageData(0,0,targetSize,targetSize);
-        ctx.fillStyle = 'black'; ctx.fillRect(0,0,targetSize,targetSize);
-        ctx.font = 'bold 8px monospace';
-        const chars = '@#S%?*+;:,.. ';
-        const step = 8;
-        for(let y=0; y<targetSize; y+=step) {
-            for(let x=0; x<targetSize; x+=step) {
-                const i = (y * targetSize + x) * 4;
-                const brightness = (data.data[i] + data.data[i+1] + data.data[i+2]) / 3;
-                const char = chars[Math.floor((brightness/255) * (chars.length-1))];
-                ctx.fillStyle = `rgb(${data.data[i]}, ${data.data[i+1]}, ${data.data[i+2]})`;
-                ctx.fillText(char, x, y);
-            }
-        }
-    }
-
-    // Creeper Face Overlay
-    if (effects.creeperOverlay) {
-        ctx.save();
-        ctx.globalCompositeOperation = 'source-atop';
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.45)';
-        const u = targetSize / 10;
-        ctx.fillRect(u*2, u*2, u*2, u*2);
-        ctx.fillRect(u*6, u*2, u*2, u*2);
-        ctx.fillRect(u*4, u*4, u*2, u*3);
-        ctx.fillRect(u*3, u*5, u*1, u*3);
-        ctx.fillRect(u*6, u*5, u*1, u*3);
-        ctx.restore();
-    }
-
-    if (effects.crtEffect) {
-        ctx.save();
-        ctx.globalAlpha = 0.25;
-        ctx.fillStyle = '#000';
-        for (let i=0; i<targetSize; i+=3) ctx.fillRect(0, i, targetSize, 1);
         ctx.restore();
     }
 

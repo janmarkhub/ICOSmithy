@@ -1,13 +1,13 @@
+
 import React, { useState } from 'react';
 import { BatchEffects } from '../types';
 import { DEFAULT_EFFECTS } from '../utils/imageProcessor';
 import { 
-  Wand2, Dice5, Activity, Info, Hammer, Palette, Play, 
-  Maximize, Layers, Shield, Sparkles, Box, Sun, Moon, 
-  Scissors, Droplets, Binary, Monitor, Zap, Frame, 
-  Wind, Ghost, Cpu, Camera, RefreshCw
+  Info, Hammer, Palette, Sparkles, Box, 
+  Cpu, Camera, Zap, X
 } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
+import { RetroTooltip } from './RetroTooltip';
 
 interface EffectsPanelProps {
   effects: BatchEffects;
@@ -61,167 +61,155 @@ export const EffectsPanel: React.FC<EffectsPanelProps> = ({ effects, setEffects,
   };
 
   const ControlGroup = ({ title, icon: Icon, children, info }: any) => (
-    <div className="space-y-4 bg-[#8b8b8b] p-4 border-4 border-t-[#555555] border-l-[#555555] border-r-[#ffffff] border-b-[#ffffff] relative flex flex-col h-full group hover:bg-[#999] transition-all">
-      <div className="flex items-center justify-between text-white mb-2 drop-shadow-[2px_2px_0px_rgba(0,0,0,1)]">
+    <div className="flex flex-col h-full bg-[#c6c6c6] border-2 border-black shadow-[inset_2px_2px_0_#fff,inset_-2px_-2px_0_#555] p-3">
+      <div className="flex items-center justify-between mb-3 border-b border-black/20 pb-1">
         <div className="flex items-center gap-2">
-            <Icon size={14} className="group-hover:animate-mosh-shake" />
-            <h4 className="text-[9px] font-black uppercase tracking-widest">{title}</h4>
+            <Icon size={14} className="text-[#333]" />
+            <h4 className="text-[10px] font-bold uppercase text-[#333] tracking-wider">{title}</h4>
         </div>
         {info && (
             <div className="relative group/info">
-                <Info size={12} className="text-white opacity-50 cursor-help" />
-                <div className="absolute right-0 bottom-full mb-2 w-48 p-3 bg-black border-4 border-white text-[9px] text-white rounded-sm shadow-2xl opacity-0 group-hover/info:opacity-100 pointer-events-none transition-opacity z-50 uppercase font-bold leading-tight">
+                <Info size={12} className="text-[#333] opacity-40 cursor-help" />
+                <div className="absolute right-0 bottom-full mb-2 w-48 p-2 bg-black border-2 border-white text-[9px] text-white shadow-2xl opacity-0 group-hover/info:opacity-100 pointer-events-none transition-opacity z-[100] uppercase font-bold leading-tight">
                     {info}
                 </div>
             </div>
         )}
       </div>
-      <div className="space-y-4 flex-1">{children}</div>
-    </div>
-  );
-
-  const SliderField = ({ label, value, min, max, onChange, step = 1, suffix = "" }: any) => (
-    <div className="space-y-1">
-      <div className="flex justify-between text-[7px] text-white font-black uppercase drop-shadow-[1px_1px_0px_rgba(0,0,0,1)]">
-        <span>{label}</span>
-        <span className="text-yellow-400 font-mono">{value}{suffix}</span>
+      <div className="space-y-3 flex-1 overflow-visible">
+        {children}
       </div>
-      <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(+e.target.value)} 
-        className="w-full h-1.5 bg-[#333] appearance-none cursor-pointer accent-yellow-500 border-2 border-black" />
     </div>
   );
 
-  const ToggleField = ({ label, active, onToggle }: any) => (
-    <div className="flex items-center justify-between p-1.5 bg-[#555] border-2 border-black hover:border-white transition-colors">
-        <span className="text-[8px] font-black text-white uppercase drop-shadow-[1px_1px_0px_rgba(0,0,0,1)]">{label}</span>
-        <button onClick={onToggle} className={`px-2 py-0.5 border-2 text-[7px] font-black uppercase transition-all ${active ? 'bg-[#ffca28] border-white text-black scale-105' : 'bg-[#333] border-white text-white opacity-60'}`}>
-            {active ? 'ON' : 'OFF'}
-        </button>
-    </div>
+  const SliderField = ({ label, value, min, max, onChange, step = 1, suffix = "", tooltipTitle, tooltipDesc }: any) => (
+    <RetroTooltip title={tooltipTitle} description={tooltipDesc}>
+      <div className="space-y-1">
+        <div className="flex justify-between text-[8px] text-[#333] font-bold uppercase">
+          <span className="truncate pr-1">{label}</span>
+          <span className="text-indigo-700">{value}{suffix}</span>
+        </div>
+        <input 
+          type="range" 
+          min={min} 
+          max={max} 
+          step={step} 
+          value={value} 
+          onChange={e => onChange(+e.target.value)} 
+          className="w-full h-1 bg-[#888] appearance-none cursor-pointer accent-indigo-600 border border-black" 
+        />
+      </div>
+    </RetroTooltip>
+  );
+
+  const ToggleField = ({ label, active, onToggle, tooltipTitle, tooltipDesc }: any) => (
+    <RetroTooltip title={tooltipTitle} description={tooltipDesc}>
+      <div className="flex items-center justify-between p-1 bg-[#d6d6d6] border border-black/20">
+          <span className="text-[8px] font-bold text-[#333] uppercase truncate pr-1">{label}</span>
+          <button 
+            onClick={onToggle} 
+            className={`px-1.5 py-0.5 border text-[7px] font-black uppercase transition-all shadow-sm ${active ? 'bg-indigo-600 text-white border-white' : 'bg-[#bbb] border-black/40 text-[#444]'}`}
+          >
+              {active ? 'ON' : 'OFF'}
+          </button>
+      </div>
+    </RetroTooltip>
   );
 
   return (
-    <div className={`bg-[#c6c6c6] p-6 border-8 border-t-[#ffffff] border-l-[#ffffff] border-r-[#555555] border-b-[#555555] mb-6 shadow-2xl transition-all ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
-      <div className="flex items-center justify-between mb-8 border-b-4 border-[#555555] pb-4">
-        <div className="flex items-center gap-4 relative">
-          <div 
-            onMouseEnter={() => setIsHammerHovered(true)}
-            onMouseLeave={() => setIsHammerHovered(false)}
-            onClick={handleHammerClick}
-            className={`bg-[#555] p-3 border-4 border-t-[#8b8b8b] border-l-[#8b8b8b] border-r-[#222] border-b-[#222] text-yellow-500 cursor-pointer hover:scale-110 active:rotate-12 transition-all relative group shadow-xl`}
-          >
-            <Hammer size={32} className={isHammerHovered ? 'animate-mosh-sparkle' : ''} />
-            {isHammerHovered && (
-                <div className="absolute -top-14 left-1/2 -translate-x-1/2 bubble whitespace-nowrap z-50 animate-bounce">
-                    {lastState ? 'RESTORE!' : 'HIT ME!'}
-                </div>
-            )}
-          </div>
+    <div className={`w-full bg-[#c6c6c6] border-2 border-black shadow-[4px_4px_0_#000,inset_2px_2px_0_#fff] p-4 mb-6 transition-all ${disabled ? 'opacity-50 pointer-events-none' : ''}`}>
+      <div className="flex flex-col sm:flex-row items-center justify-between mb-6 gap-4 border-b-2 border-black/10 pb-4">
+        <div className="flex items-center gap-4">
+          <RetroTooltip title="The Chaos Hammer" description="Whack the table to randomize effects. If you don't like it, whack again to restore the previous state." position="right">
+            <div 
+              onMouseEnter={() => setIsHammerHovered(true)}
+              onMouseLeave={() => setIsHammerHovered(false)}
+              onClick={handleHammerClick}
+              className={`win-button p-2 text-indigo-700 cursor-pointer hover:scale-105 active:scale-95 transition-all shadow-md group`}
+            >
+              <Hammer size={24} className={isHammerHovered ? 'animate-mosh-sparkle' : ''} />
+            </div>
+          </RetroTooltip>
           <div>
-            <h3 className="font-black text-3xl tracking-tighter uppercase text-white drop-shadow-[3px_3px_0px_rgba(0,0,0,1)]">The Smithy</h3>
-            <p className="text-[10px] text-[#555] font-black tracking-[0.3em] uppercase">Professional Batch Refiner</p>
+            <h3 className="font-bold text-xl uppercase text-[#333] tracking-tighter">THE SMITHY</h3>
+            <p className="text-[9px] text-[#666] font-bold uppercase tracking-widest">BATCH ASSET REFINER</p>
           </div>
         </div>
-        <div className="flex gap-3">
-            <button onClick={handleInspireMe} className="flex items-center gap-2 px-6 py-2 bg-indigo-600 border-4 border-t-indigo-400 border-l-indigo-400 border-r-indigo-900 border-b-indigo-900 text-white text-[10px] font-black uppercase shadow-lg hover:bg-indigo-500 active:scale-95 transition-all">
-                <Zap size={14} /> AI Blessing
+        
+        <div className="flex gap-2 w-full sm:w-auto">
+            <button 
+                onClick={handleInspireMe} 
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 bg-indigo-600 border-2 border-black text-white text-[9px] font-bold uppercase shadow-[2px_2px_0_#000,inset_1px_1px_0_#fff] hover:bg-indigo-500 active:scale-95"
+            >
+                <Zap size={12} /> AI BLESSING
             </button>
-            <button onClick={() => setEffects(DEFAULT_EFFECTS)} className="px-6 py-2 bg-red-700 border-4 border-t-red-500 border-l-red-500 border-r-red-950 border-b-red-950 text-white text-[10px] font-black uppercase hover:bg-red-600 active:scale-95 transition-all">
-                Purge Table
+            <button 
+                onClick={() => setEffects(DEFAULT_EFFECTS)} 
+                className="flex-1 sm:flex-none px-4 py-2 bg-[#f87171] border-2 border-black text-white text-[9px] font-bold uppercase shadow-[2px_2px_0_#000,inset_1px_1px_0_#fff] hover:bg-red-500 active:scale-95"
+            >
+                PURGE TABLE
             </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        
-        {/* Module 1: The Foundry (Geometry) */}
-        <ControlGroup title="The Foundry" icon={Box} info="Core geometry and pixel precision.">
-             <div className="flex justify-between items-center text-[10px] text-white font-black uppercase drop-shadow-[1px_1px_0px_rgba(0,0,0,1)] mb-2">
-               <span>PIXEL DEPTH</span>
-               <select value={effects.pixelDepth} onChange={e => update('pixelDepth', e.target.value)} className="bg-[#333] text-[9px] border-2 border-white px-2 text-white uppercase font-black outline-none smith-select cursor-pointer">
-                 <option value="none">Lossless</option>
-                 <option value="32-bit">32-Bit</option>
-                 <option value="16-bit">16-Bit</option>
-                 <option value="8-bit">8-Bit</option>
-               </select>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <ControlGroup title="FOUNDRY" icon={Box} info="Core geometry and pixel precision.">
+             <div className="flex justify-between items-center text-[8px] text-[#333] font-bold uppercase mb-2">
+                 <span>PIXEL DEPTH</span>
+                 <select 
+                    value={effects.pixelDepth} 
+                    onChange={e => update('pixelDepth', e.target.value)} 
+                    className="bg-[#eee] text-[8px] border border-black px-1 text-black uppercase font-bold outline-none cursor-pointer"
+                 >
+                   <option value="none">Lossless</option>
+                   <option value="32-bit">32-Bit</option>
+                   <option value="16-bit">16-Bit</option>
+                   <option value="8-bit">8-Bit</option>
+                 </select>
              </div>
-             <SliderField label="Rounding" value={effects.cornerRadius} min={0} max={100} onChange={(v: any) => update('cornerRadius', v)} />
-             <ToggleField label="ASCII Mode" active={effects.asciiMode} onToggle={() => update('asciiMode', !effects.asciiMode)} />
-             <ToggleField label="Creeper Face" active={effects.creeperOverlay} onToggle={() => update('creeperOverlay', !effects.creeperOverlay)} />
+             <SliderField label="Rounding" value={effects.cornerRadius} min={0} max={100} onChange={(v: any) => update('cornerRadius', v)} 
+               tooltipTitle="Corner Radius" tooltipDesc="Smooths out the sharp edges of your icons for a modern look." />
+             <ToggleField label="ASCII Mode" active={effects.asciiMode} onToggle={() => update('asciiMode', !effects.asciiMode)} 
+               tooltipTitle="ASCII Terminal" tooltipDesc="Replaces gradients with text characters." />
+             <ToggleField label="Creeper" active={effects.creeperOverlay} onToggle={() => update('creeperOverlay', !effects.creeperOverlay)} 
+               tooltipTitle="Minecraft Pattern" tooltipDesc="Overlays a subtle creeper face pattern." />
         </ControlGroup>
 
-        {/* Module 2: Recontextualizer (Uniformity/Upscaling) */}
-        <ControlGroup title="Recontextualizer" icon={Cpu} info="Tools to normalize batch inputs and improve consistency.">
-            <ToggleField label="Uniform Inputs" active={effects.normalizeInputs} onToggle={() => update('normalizeInputs', !effects.normalizeInputs)} />
-            <ToggleField label="Remove Background" active={effects.removeBackground} onToggle={() => update('removeBackground', !effects.removeBackground)} />
-            <SliderField label="Smart Upscale" value={effects.smartUpscaleIntensity} min={0} max={100} onChange={(v: any) => update('smartUpscaleIntensity', v)} />
-            <ToggleField label="Auto-Fit" active={effects.autoFit} onToggle={() => update('autoFit', !effects.autoFit)} />
+        <ControlGroup title="CORE" icon={Cpu} info="Tools to normalize batch inputs.">
+            <ToggleField label="Uniform" active={effects.normalizeInputs} onToggle={() => update('normalizeInputs', !effects.normalizeInputs)} 
+              tooltipTitle="Input Normalization" tooltipDesc="Forces consistent bounding box sizing." />
+            <ToggleField label="Scrub BG" active={effects.removeBackground} onToggle={() => update('removeBackground', !effects.removeBackground)} 
+              tooltipTitle="Auto-Transparency" tooltipDesc="Strips pure white backgrounds." />
+            <SliderField label="Upscale" value={effects.smartUpscaleIntensity} min={0} max={100} onChange={(v: any) => update('smartUpscaleIntensity', v)} 
+              tooltipTitle="Bicubic Smoothing" tooltipDesc="Smooths low-res pixels for HD." />
+            <ToggleField label="Auto-Fit" active={effects.autoFit} onToggle={() => update('autoFit', !effects.autoFit)} 
+              tooltipTitle="Padding" tooltipDesc="Keeps icon within safe margins." />
         </ControlGroup>
 
-        {/* Module 3: Alchemy (Materials) */}
-        <ControlGroup title="Alchemy" icon={Palette} info="Surface materials and magical glints.">
-          <ToggleField label="Enchant Glint" active={effects.enchantmentGlint} onToggle={() => update('enchantmentGlint', !effects.enchantmentGlint)} />
-          <SliderField label="Metallic" value={effects.metallicIntensity} min={0} max={100} onChange={(v: any) => update('metallicIntensity', v)} />
-          <SliderField label="Sheen Angle" value={effects.sheenAngle} min={0} max={360} onChange={(v: any) => update('sheenAngle', v)} />
+        <ControlGroup title="ALCHEMY" icon={Sparkles} info="Materials and magical glints.">
+          <ToggleField label="Enchant" active={effects.enchantmentGlint} onToggle={() => update('enchantmentGlint', !effects.enchantmentGlint)} 
+            tooltipTitle="Glint" tooltipDesc="Moving purple glint effect." />
+          <SliderField label="Metallic" value={effects.metallicIntensity} min={0} max={100} onChange={(v: any) => update('metallicIntensity', v)} 
+            tooltipTitle="Metallic" tooltipDesc="Chrome-like reflective surface." />
           <div className="flex items-center gap-2 pt-1">
-            <input type="color" value={effects.outlineColor} onChange={e => update('outlineColor', e.target.value)} className="w-8 h-8 border-2 border-black cursor-pointer hover:scale-110 transition-transform" />
-            <div className="flex-1"><SliderField label="Outline" value={effects.outlineWidth} min={0} max={40} onChange={(v: any) => update('outlineWidth', v)} /></div>
+            <input type="color" value={effects.outlineColor} onChange={e => update('outlineColor', e.target.value)} className="w-6 h-6 border border-black cursor-pointer shadow-sm" />
+            <div className="flex-1">
+              <SliderField label="Outline" value={effects.outlineWidth} min={0} max={40} onChange={(v: any) => update('outlineWidth', v)} 
+              tooltipTitle="Outline" tooltipDesc="Adds a thick border around icons." />
+            </div>
           </div>
         </ControlGroup>
 
-        {/* Module 4: Optics (Visual Artifacts) */}
-        <ControlGroup title="Optics" icon={Camera} info="Lens effects and vintage rendering styles.">
-            <ToggleField label="Dither Path" active={effects.dither} onToggle={() => update('dither', !effects.dither)} />
-            <SliderField label="Aberration" value={effects.chromaticAberration} min={0} max={20} onChange={(v: any) => update('chromaticAberration', v)} />
-            <SliderField label="Halftone" value={effects.halftoneIntensity} min={0} max={100} onChange={(v: any) => update('halftoneIntensity', v)} />
-            <SliderField label="Vignette" value={effects.vignette} min={0} max={100} onChange={(v: any) => update('vignette', v)} />
+        <ControlGroup title="OPTICS" icon={Camera} info="Lens effects and rendering.">
+            <ToggleField label="Dither" active={effects.dither} onToggle={() => update('dither', !effects.dither)} 
+              tooltipTitle="Retro Dithering" tooltipDesc="Simulates old CRT monitor look." />
+            <SliderField label="Aberration" value={effects.chromaticAberration} min={0} max={20} onChange={(v: any) => update('chromaticAberration', v)} 
+              tooltipTitle="Lens Fringe" tooltipDesc="Splits colors at the edges." />
+            <SliderField label="Halftone" value={effects.halftoneIntensity} min={0} max={100} onChange={(v: any) => update('halftoneIntensity', v)} 
+              tooltipTitle="Halftone" tooltipDesc="Comic style printing dots." />
+            <SliderField label="Vignette" value={effects.vignette} min={0} max={100} onChange={(v: any) => update('vignette', v)} 
+              tooltipTitle="Vignette" tooltipDesc="Darkens the corners of the canvas." />
         </ControlGroup>
-
-        {/* Module 5: Chaos Lab (Distortion) */}
-        <ControlGroup title="Chaos Lab" icon={Activity} info="Digital destruction and glitch aesthetics.">
-            <SliderField label="Pixel Sorting" value={effects.pixelSort} min={0} max={100} onChange={(v: any) => update('pixelSort', v)} />
-            <SliderField label="RGB Splitting" value={effects.rgbSplit} min={0} max={20} onChange={(v: any) => update('rgbSplit', v)} />
-            <ToggleField label="CRT Scan" active={effects.crtEffect} onToggle={() => update('crtEffect', !effects.crtEffect)} />
-            <SliderField label="Static Noise" value={effects.tvNoise} min={0} max={100} onChange={(v: any) => update('tvNoise', v)} />
-        </ControlGroup>
-
-        {/* Module 6: Shadow Forge (Depth) */}
-        <ControlGroup title="Shadow Forge" icon={Layers} info="Depth management and shadow casting.">
-            <SliderField label="Blur Radius" value={effects.shadowBlur} min={0} max={40} onChange={(v: any) => update('shadowBlur', v)} />
-            <SliderField label="Long Shadow" value={effects.longShadowLength} min={0} max={100} onChange={(v: any) => update('longShadowLength', v)} />
-            <SliderField label="Opacity" value={effects.shadowOpacity} min={0} max={1} step={0.1} onChange={(v: any) => update('shadowOpacity', v)} />
-            <input type="color" value={effects.shadowColor} onChange={e => update('shadowColor', e.target.value)} className="w-full h-4 border-2 border-black cursor-pointer" />
-        </ControlGroup>
-
-        {/* Module 7: Glass Works (Transparency) */}
-        <ControlGroup title="Glass Works" icon={Droplets} info="Modern OS transparency and acrylic effects.">
-            <SliderField label="Glass Blur" value={effects.glassBlur} min={0} max={100} onChange={(v: any) => update('glassBlur', v)} />
-            <SliderField label="Glass Opacity" value={effects.glassOpacity} min={0} max={100} onChange={(v: any) => update('glassOpacity', v)} />
-            <SliderField label="Inner Glow" value={effects.innerGlowBlur} min={0} max={50} onChange={(v: any) => update('innerGlowBlur', v)} />
-            <ToggleField label="Duotone" active={effects.duotone} onToggle={() => update('duotone', !effects.duotone)} />
-        </ControlGroup>
-
-        {/* Module 8: Motion Forge (GIF Prep) */}
-        <ControlGroup title="Motion Forge" icon={Play} info="Configure looping animations. Set Export to GIF to see results.">
-           <ToggleField label="Enable Loop" active={effects.isAnimated} onToggle={() => update('isAnimated', !effects.isAnimated)} />
-           {effects.isAnimated && (
-             <div className="space-y-4 pt-2 border-t-2 border-black/10 animate-in slide-in-from-top-1">
-                <select value={effects.animationType} onChange={e => update('animationType', e.target.value)} className="w-full bg-[#333] text-[9px] p-2 border-2 border-white text-white uppercase font-black outline-none smith-select cursor-pointer">
-                  <option value="float">Floating</option>
-                  <option value="pulse">Heartbeat</option>
-                  <option value="spin">Rotating</option>
-                  <option value="jitter">Ender Jitter</option>
-                  <option value="bounce">Slime Bounce</option>
-                  <option value="swing">Bell Swing</option>
-                </select>
-                <div className="grid grid-cols-2 gap-2">
-                    <SliderField label="Ticks" value={effects.animationSpeed} min={1} max={15} onChange={(v: any) => update('animationSpeed', v)} />
-                    <SliderField label="Amplify" value={effects.animationIntensity} min={1} max={100} onChange={(v: any) => update('animationIntensity', v)} />
-                </div>
-             </div>
-           )}
-        </ControlGroup>
-
       </div>
     </div>
   );

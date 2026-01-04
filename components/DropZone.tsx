@@ -1,6 +1,7 @@
 
 import React, { useCallback, useState } from 'react';
-import { Upload, FileType, FolderUp, ImageIcon } from 'lucide-react';
+import { FileType, FolderUp, ImageIcon, UploadCloud } from 'lucide-react';
+import { RetroTooltip } from './RetroTooltip';
 
 interface DropZoneProps {
   onFilesSelected: (files: File[]) => void;
@@ -18,7 +19,6 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFilesSelected }) => {
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault(); e.stopPropagation(); setIsDragging(false);
-    // Cast Array.from result to File[] to ensure the filter callback can access 'name' property
     const files = (Array.from(e.dataTransfer.files) as File[]).filter(f => 
       ['.ico', '.png', '.jpg', '.jpeg', '.bmp', '.webp'].some(ext => f.name.toLowerCase().endsWith(ext))
     );
@@ -26,7 +26,6 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFilesSelected }) => {
   }, [onFilesSelected]);
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Cast Array.from result to File[] to ensure the filter callback can access 'name' property
     const files = (Array.from(e.target.files || []) as File[]).filter(f => 
       ['.ico', '.png', '.jpg', '.jpeg', '.bmp', '.webp'].some(ext => f.name.toLowerCase().endsWith(ext))
     );
@@ -34,26 +33,35 @@ export const DropZone: React.FC<DropZoneProps> = ({ onFilesSelected }) => {
   };
 
   return (
-    <div
-      onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}
-      className={`relative group border-2 border-dashed rounded-3xl p-12 transition-all duration-500 flex flex-col items-center justify-center cursor-pointer
-        ${isDragging 
-          ? 'border-indigo-500 bg-indigo-500/10 scale-[1.02] shadow-2xl' 
-          : 'border-white/10 bg-white/5 hover:border-indigo-500/50 hover:bg-white/10'
-        }`}
-    >
-      <input type="file" multiple className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" onChange={handleFileInput} accept=".ico,.png,.jpg,.jpeg,.bmp,.webp" />
-      <div className={`p-6 rounded-full mb-6 transition-all duration-500 ${isDragging ? 'scale-125 bg-indigo-500 text-white' : 'bg-indigo-500/20 text-indigo-400 group-hover:scale-110'}`}>
-        <ImageIcon size={40} />
-      </div>
-      <div className="text-center">
-        <p className="text-xl font-bold mb-2 tracking-tight">Drop any image or icon</p>
-        <p className="text-sm text-slate-500 mb-6 uppercase tracking-widest font-mono">JPG, PNG, WEBP, BMP, ICO SUPPORTED</p>
-        <div className="flex gap-6 justify-center text-[10px] text-slate-500 font-bold uppercase tracking-widest">
-          <span className="flex items-center gap-1.5"><FileType size={14}/> Auto-Normalize</span>
-          <span className="flex items-center gap-1.5"><FolderUp size={14}/> Batch Studio</span>
+    <RetroTooltip title="Import Portal" description="Drag ICO files or image folders here for batch processing." position="top">
+      <div
+        onDragEnter={handleDrag} onDragOver={handleDrag} onDragLeave={handleDrag} onDrop={handleDrop}
+        className={`relative w-full border-4 border-dashed transition-all duration-300 p-10 flex flex-col items-center justify-center cursor-pointer
+          ${isDragging 
+            ? 'border-indigo-500 bg-indigo-500/10 scale-[1.01]' 
+            : 'border-white/10 bg-white/5 hover:border-white/30 hover:bg-white/10'
+          }`}
+      >
+        <input 
+          type="file" 
+          multiple 
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" 
+          onChange={handleFileInput} 
+          accept=".ico,.png,.jpg,.jpeg,.bmp,.webp" 
+        />
+        <div className={`p-5 rounded-full mb-4 transition-all duration-300 ${isDragging ? 'scale-110 bg-indigo-600 text-white' : 'bg-white/10 text-white/40'}`}>
+          <UploadCloud size={48} />
+        </div>
+        <div className="text-center space-y-2">
+          <p className="text-lg font-bold text-white uppercase tracking-tight">Drop Assets Here</p>
+          <p className="text-[10px] text-slate-500 uppercase font-bold tracking-[0.2em]">ICO, PNG, JPG, BMP Supported</p>
+          
+          <div className="flex gap-4 justify-center pt-4 text-[8px] text-slate-500 font-bold uppercase tracking-widest opacity-60">
+            <span className="flex items-center gap-1.5"><FileType size={12}/> AUTO-EXTRACT</span>
+            <span className="flex items-center gap-1.5"><FolderUp size={12}/> BULK LOADER</span>
+          </div>
         </div>
       </div>
-    </div>
+    </RetroTooltip>
   );
 };

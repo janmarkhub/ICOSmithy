@@ -2,9 +2,10 @@
 import React, { useState } from 'react';
 import { 
   Package, Plus, Trash2, MousePointer2, Hammer, X, 
-  Sparkles, Wand2, CloudRain, Monitor, Scissors 
+  Sparkles, Wand2, CloudRain, Monitor, LayoutGrid 
 } from 'lucide-react';
 import { CustomSticker, StickerTexture, ProcessedFile } from '../types';
+import { RetroTooltip } from './RetroTooltip';
 
 interface StickerClipboardProps {
   onAddSticker: (url: string, slotIndex: number) => void;
@@ -19,7 +20,7 @@ interface StickerClipboardProps {
 export const StickerClipboard: React.FC<StickerClipboardProps> = ({ 
   onAddSticker, onRemoveSticker, stickers, processedIcons, onBatchApply, onGenerate, onApplyTexture
 }) => {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
   const [workbenchSticker, setWorkbenchSticker] = useState<CustomSticker | null>(null);
 
   const handleSlotUpload = (e: React.ChangeEvent<HTMLInputElement>, slotIndex: number) => {
@@ -35,14 +36,13 @@ export const StickerClipboard: React.FC<StickerClipboardProps> = ({
   };
 
   const textureList: { id: StickerTexture, label: string }[] = [
-    { id: 'none', label: 'Raw' },
-    { id: 'foil', label: 'Foil' },
-    { id: 'holo', label: 'Holo' },
-    { id: 'gold', label: 'Gold' },
-    { id: 'realistic', label: 'Real' }
+    { id: 'none', label: 'RAW' },
+    { id: 'foil', label: 'FOIL' },
+    { id: 'holo', label: 'HOLO' },
+    { id: 'gold', label: 'GOLD' },
+    { id: 'realistic', label: 'REAL' }
   ];
 
-  // Combined inventory logic: show stickers first, then icons
   const inventorySlots = Array.from({ length: 30 }).map((_, i) => {
     const sticker = stickers[i];
     const icon = !sticker ? processedIcons[i - stickers.length] : null;
@@ -50,26 +50,26 @@ export const StickerClipboard: React.FC<StickerClipboardProps> = ({
   });
 
   return (
-    <div className="fixed right-6 bottom-6 z-50 flex items-end gap-4 pointer-events-none">
+    <div className="fixed right-6 bottom-6 z-[2000] flex items-end gap-4 pointer-events-none">
       {isOpen && (
-        <div className="pointer-events-auto w-[440px] bg-[#c6c6c6] border-4 border-t-[#ffffff] border-l-[#ffffff] border-r-[#555555] border-b-[#555555] shadow-[12px_12px_0px_0px_rgba(0,0,0,0.5)] p-4 font-mono">
-          <div className="flex items-center justify-between mb-4 bg-[#8b8b8b] p-2 border-2 border-b-[#555555] border-r-[#555555] border-t-[#ffffff] border-l-[#ffffff]">
-            <h4 className="text-xs text-white font-bold uppercase drop-shadow-[2px_2px_0px_rgba(0,0,0,1)] flex items-center gap-2">
-                <Hammer size={14} /> Global Bag
+        <div className="pointer-events-auto w-[400px] bg-[#c6c6c6] border-2 border-black shadow-[8px_8px_0_#000,inset_2px_2px_0_#fff] p-3 animate-in slide-in-from-right-8 duration-300">
+          <div className="flex items-center justify-between bg-[#000080] p-1.5 mb-4 border border-black shadow-[inset_1px_1px_0_#ffffff22]">
+            <h4 className="text-[10px] text-white font-bold uppercase flex items-center gap-2">
+                <Package size={14} /> GLOBAL_BAG.EXE
             </h4>
-            <button onClick={() => setIsOpen(false)} className="text-white hover:text-red-400 transition-colors"><X size={16}/></button>
+            <button onClick={() => setIsOpen(false)} className="text-white hover:bg-red-600 p-0.5"><X size={14}/></button>
           </div>
 
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            {/* Enchanting Area */}
+          <div className="grid grid-cols-2 gap-3 mb-3">
+            {/* Enchanting Slot */}
             <div 
-              className="bg-[#8b8b8b] border-4 border-[#3c3c3c] flex flex-col items-center justify-center relative p-2 h-44"
+              className="bg-[#eee] border-2 border-black shadow-[inset_2px_2px_0_#888] flex flex-col items-center justify-center p-2 h-40 relative group"
               onDragOver={e => e.preventDefault()}
               onDrop={handleWorkbenchDrop}
             >
                 {workbenchSticker ? (
-                    <div className="flex flex-col items-center w-full">
-                        <img src={workbenchSticker.url} className="w-12 h-12 object-contain mb-2 pixelated" />
+                    <div className="flex flex-col items-center w-full animate-in zoom-in duration-150">
+                        <img src={workbenchSticker.url} className="w-10 h-10 object-contain mb-3 pixelated" />
                         <div className="grid grid-cols-2 gap-1 w-full">
                             {textureList.map(t => (
                                 <button 
@@ -78,41 +78,46 @@ export const StickerClipboard: React.FC<StickerClipboardProps> = ({
                                         onApplyTexture(workbenchSticker.id, t.id);
                                         setWorkbenchSticker(null);
                                     }}
-                                    className={`text-[8px] p-1 border border-black uppercase font-bold transition-all ${workbenchSticker.texture === t.id ? 'bg-[#ffca28] border-white text-black' : 'bg-[#ddd] hover:bg-white text-[#333]'}`}
+                                    className={`text-[7px] p-1 border border-black uppercase font-bold shadow-sm transition-all ${workbenchSticker.texture === t.id ? 'bg-indigo-600 text-white' : 'bg-[#ddd] hover:bg-white text-[#333]'}`}
                                 >
                                     {t.label}
                                 </button>
                             ))}
                         </div>
+                        <button onClick={()=>setWorkbenchSticker(null)} className="absolute top-1 right-1 text-[#333] hover:text-red-600"><X size={12}/></button>
                     </div>
                 ) : (
-                    <p className="text-[9px] text-white opacity-40 text-center animate-pulse uppercase font-bold">Enchant Sticker Slot</p>
+                    <div className="flex flex-col items-center gap-2 opacity-30">
+                        <Hammer size={24} className="text-[#333]" />
+                        <p className="text-[8px] text-[#333] text-center uppercase font-bold">DROP_ASSET_TO_ENCHANT</p>
+                    </div>
                 )}
             </div>
 
-            {/* Quick Spell Bar */}
-            <div className="bg-[#8b8b8b] p-2 border-2 border-t-[#555555] border-l-[#555555] border-b-[#ffffff] border-r-[#ffffff] flex flex-col gap-1">
-                <p className="text-[8px] text-white uppercase font-bold mb-1 opacity-60">Icon Magic</p>
-                <div className="grid grid-cols-2 gap-1 flex-1">
-                    <button onClick={() => onGenerate('random')} className="p-1 bg-[#555] border-2 border-white hover:bg-[#666] flex flex-col items-center justify-center text-white">
-                        <Sparkles size={12}/><span className="text-[7px] uppercase font-bold">Chaos</span>
-                    </button>
-                    <button onClick={() => onGenerate('based')} className="p-1 bg-[#555] border-2 border-white hover:bg-[#666] flex flex-col items-center justify-center text-white">
-                        <Monitor size={12}/><span className="text-[7px] uppercase font-bold">Set Gen</span>
-                    </button>
-                    <button onClick={() => onGenerate('hat')} className="p-1 bg-[#555] border-2 border-white hover:bg-[#666] flex flex-col items-center justify-center text-white">
-                        <Package size={12}/><span className="text-[7px] uppercase font-bold">Style</span>
-                    </button>
-                    <button onClick={() => onGenerate('weather')} className="p-1 bg-[#555] border-2 border-white hover:bg-[#666] flex flex-col items-center justify-center text-white">
-                        <CloudRain size={12}/><span className="text-[7px] uppercase font-bold">Weather</span>
-                    </button>
+            {/* AI Spell Casting */}
+            <div className="bg-[#eee] border-2 border-black shadow-[inset_2px_2px_0_#888] p-2 flex flex-col gap-2">
+                <p className="text-[8px] text-[#333] uppercase font-bold border-b border-black/10 pb-1">AI SPELLS</p>
+                <div className="grid grid-cols-2 gap-1.5 flex-1">
+                    {[
+                        { id: 'random', label: 'CHAOS', icon: Sparkles, color: 'hover:bg-amber-400' },
+                        { id: 'based', label: 'THEME', icon: LayoutGrid, color: 'hover:bg-blue-400' },
+                        { id: 'hat', label: 'STYLE', icon: Wand2, color: 'hover:bg-purple-400' },
+                        { id: 'weather', label: 'FLUX', icon: CloudRain, color: 'hover:bg-cyan-400' }
+                    ].map(spell => (
+                        <button 
+                            key={spell.id}
+                            onClick={() => onGenerate(spell.id)} 
+                            className={`p-1 bg-[#ccc] border border-black shadow-[1px_1px_0_#fff] flex flex-col items-center justify-center text-[#333] transition-colors ${spell.color}`}
+                        >
+                            <spell.icon size={12}/><span className="text-[7px] uppercase font-bold mt-0.5">{spell.label}</span>
+                        </button>
+                    ))}
                 </div>
             </div>
           </div>
 
-          {/* Main Slots */}
-          <div className="bg-[#8b8b8b] p-1 border-2 border-t-[#555555] border-l-[#555555] border-b-[#ffffff] border-r-[#ffffff]">
-            <div className="grid grid-cols-5 gap-1 max-h-[250px] overflow-y-auto p-1 custom-scrollbar">
+          <div className="bg-[#8b8b8b] border-2 border-black shadow-[inset_2px_2px_0_#333] p-1">
+            <div className="grid grid-cols-5 gap-1 max-h-[160px] overflow-y-auto p-1 custom-scrollbar">
               {inventorySlots.map((slot, i) => (
                   <div 
                     key={i} 
@@ -121,28 +126,26 @@ export const StickerClipboard: React.FC<StickerClipboardProps> = ({
                       if (slot.sticker) e.dataTransfer.setData('stickerId', slot.sticker.id);
                       if (slot.icon) e.dataTransfer.setData('fileId', slot.icon.id);
                     }}
-                    className="aspect-square bg-[#8b8b8b] border-2 border-b-[#ffffff] border-r-[#ffffff] border-t-[#555555] border-l-[#555555] flex flex-col items-center justify-center relative group overflow-hidden"
+                    className="aspect-square bg-[#eee] border border-black flex flex-col items-center justify-center relative group overflow-hidden shadow-inner"
                   >
                     {slot.sticker ? (
                       <>
                         <img src={slot.sticker.url} className="w-8 h-8 object-contain pixelated" />
-                        <span className="text-[6px] text-yellow-400 drop-shadow-[1px_1px_0px_rgba(0,0,0,1)] font-bold uppercase mt-1">Sticker</span>
-                        <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1">
-                            <button onClick={() => onBatchApply(slot.sticker!)} className="p-1 bg-green-700 text-white border-2 border-white rounded"><MousePointer2 size={10}/></button>
-                            <button onClick={() => onRemoveSticker(slot.sticker!.id)} className="p-1 bg-red-700 text-white border-2 border-white rounded"><Trash2 size={10}/></button>
+                        <div className="absolute inset-0 bg-black/80 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1 transition-opacity">
+                            <button onClick={() => onBatchApply(slot.sticker!)} className="p-1 text-white hover:text-green-400"><MousePointer2 size={12}/></button>
+                            <button onClick={() => onRemoveSticker(slot.sticker!.id)} className="p-1 text-white hover:text-red-400"><Trash2 size={12}/></button>
                         </div>
                       </>
                     ) : slot.icon ? (
                       <>
                         <img src={slot.icon.previewUrl} className="w-8 h-8 object-contain pixelated" />
-                        <span className="text-[6px] text-white drop-shadow-[1px_1px_0px_rgba(0,0,0,1)] font-bold uppercase mt-1">Icon</span>
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center">
-                            <span className="text-[5px] text-white font-bold uppercase bg-black/60 px-1">Draggable</span>
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center pointer-events-none transition-opacity">
+                            <span className="text-[5px] text-white font-bold uppercase bg-black px-1">DRAG</span>
                         </div>
                       </>
                     ) : (
-                      <label className="w-full h-full flex items-center justify-center cursor-pointer hover:bg-white/10">
-                        <Plus size={14} className="text-white opacity-20" />
+                      <label className="w-full h-full flex items-center justify-center cursor-pointer hover:bg-indigo-100 transition-colors">
+                        <Plus size={12} className="text-[#333] opacity-20" />
                         <input type="file" className="hidden" onChange={e => handleSlotUpload(e, i)} accept="image/*" />
                       </label>
                     )}
@@ -150,16 +153,17 @@ export const StickerClipboard: React.FC<StickerClipboardProps> = ({
               ))}
             </div>
           </div>
-          <p className="text-[8px] text-[#333] mt-2 italic text-center uppercase font-bold opacity-60">Inventory space: {stickers.length + processedIcons.length} / 30 slots used</p>
         </div>
       )}
 
-      <button 
-        onClick={() => setIsOpen(!isOpen)}
-        className="pointer-events-auto w-20 h-20 bg-[#c6c6c6] border-8 border-t-[#ffffff] border-l-[#ffffff] border-r-[#555555] border-b-[#555555] shadow-2xl rounded-sm flex items-center justify-center text-[#555] hover:scale-105 active:scale-95 transition-all"
-      >
-        <Package size={40} className="drop-shadow-[2px_2px_0px_rgba(255,255,255,0.2)]" />
-      </button>
+      <RetroTooltip title="Inventory" description="Access your global bag of stashed assets and AI stickers." position="left">
+        <button 
+          onClick={() => setIsOpen(!isOpen)}
+          className="pointer-events-auto w-16 h-16 bg-[#c6c6c6] border-2 border-black shadow-[4px_4px_0_#000,inset_2px_2px_0_#fff] flex items-center justify-center text-[#333] hover:scale-105 active:scale-95 transition-all"
+        >
+          <Package size={32} className={isOpen ? 'text-indigo-600' : 'text-[#333]'} />
+        </button>
+      </RetroTooltip>
     </div>
   );
 };
