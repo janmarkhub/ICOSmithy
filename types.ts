@@ -6,6 +6,7 @@ export interface ProcessedFile {
   blob: Blob;
   previewUrl: string;
   status: 'processing' | 'completed' | 'error';
+  progress: number;
   width: number;
   height: number;
   isAiGenerated?: boolean;
@@ -40,81 +41,37 @@ export interface CustomSticker {
 }
 
 export interface BatchEffects {
+  outlineEnabled: boolean;
+  glowEnabled: boolean;
+  cleanupEnabled: boolean;
+  
   outlineWidth: number;
   outlineColor: string;
   outlineOpacity: number;
   outlineStyle: 'solid' | 'dotted' | 'wavy' | 'pixelated';
-  outlineNoise: number;
-  waveAmplitude: number;
-  waveFrequency: number;
-  dashPattern: number[];
+  
   glowBlur: number;
   glowColor: string;
   glowOpacity: number;
-  glowNoise: number;
-  innerGlowBlur: number;
-  innerGlowColor: string;
-  innerGlowOpacity: number;
-  bevelSize: number;
+  
   brightness: number;
   contrast: number;
   saturation: number;
   hueRotate: number;
-  shadowX: number;
-  shadowY: number;
+  
   shadowBlur: number;
   shadowColor: string;
   shadowOpacity: number;
-  cornerRadius: number;
-  sharpness: number;
-  edgeClamping: number;
+  
   isPixelArt: boolean;
-  pixelDepth: 'none' | '32-bit' | '16-bit' | '8-bit';
   autoFit: boolean;
-  activeStickers: string[];
   customStickers: CustomSticker[];
-  rgbCycle: boolean;
-  rgbSplit: number;
-  tvNoise: number;
-  pixelSort: number;
-  fisheye: number;
-  duotone: boolean;
-  duotoneColor1: string;
-  duotoneColor2: string;
-  dither: boolean;
-  scanlines: number;
-  chromaticAberration: number;
-  sheenIntensity: number;
-  sheenAngle: number;
-  sparkleIntensity: number;
-  halftoneIntensity: number;
-  stickerMode: boolean;
-  metallicIntensity: number;
-  vignette: number;
-  longShadowLength: number;
-  longShadowOpacity: number;
-  glassBlur: number;
-  glassOpacity: number;
-  finishType: 'none';
-  finishOpacity: number;
+  
+  // Cleanup & Transparency
   removeBackground: boolean;
-  normalizeInputs: boolean;
-  smartUpscaleIntensity: number;
-  isAnimated: boolean;
-  animationType: 'float' | 'pulse' | 'spin' | 'jitter' | 'bounce' | 'wave' | 'glitch' | 'swing';
-  animationSpeed: number;
-  animationIntensity: number;
-  animationFrameCount: number;
-  animationFrameMode: 'linear' | 'random' | 'vicinity';
-  animationVicinityRange: number;
-  asciiMode: boolean;
-  enchantmentGlint: boolean;
-  crtEffect: boolean;
-  creeperOverlay: boolean;
-  sepiaTone: number;
-  blurIntensity: number;
-  cleanupIntensity: number;
-  lineartMode: boolean;
+  scrubAggression: number; // 0-200
+  keepInternalColors: boolean;
+  cleanupIntensity: number; // 0-100
 }
 
 export interface DesktopAssignments {
@@ -122,15 +79,10 @@ export interface DesktopAssignments {
   recycleBinEmpty?: string;
   recycleBinFull?: string;
   startButtonNormal?: string;
-  startButtonHover?: string;
-  startButtonClick?: string;
-  controlPanel?: string;
-  network?: string;
-  account?: string;
   folder?: string;
+  network?: string;
+  settings?: string;
   extra1?: string;
-  extra2?: string;
-  extra3?: string;
 }
 
 export interface PersonBio {
