@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IconPro HD Upscaler</title>
+    <title>Win11 Ico Toolkit</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
@@ -19,8 +19,59 @@
   }
 }
 </script>
+<style>
+    @keyframes mosh-shake {
+        0%, 100% { transform: translate(0, 0); }
+        25% { transform: translate(-2px, 2px) rotate(-2deg); }
+        75% { transform: translate(2px, -2px) rotate(2deg); }
+    }
+    @keyframes mosh-swing {
+        0% { transform: rotate(-5deg); }
+        50% { transform: rotate(5deg); }
+        100% { transform: rotate(-5deg); }
+    }
+    @keyframes mosh-sparkle {
+        0% { filter: brightness(1); }
+        50% { filter: brightness(2) contrast(1.5); }
+        100% { filter: brightness(1); }
+    }
+    @keyframes mosh-float {
+        0%, 100% { transform: translateY(0); }
+        50% { transform: translateY(-10px); }
+    }
+    .animate-mosh-shake { animation: mosh-shake 0.2s infinite; }
+    .animate-mosh-swing { animation: mosh-swing 1s ease-in-out infinite; }
+    .animate-mosh-sparkle { animation: mosh-sparkle 0.5s ease-in-out infinite; }
+    
+    .pixelated { image-rendering: pixelated; }
+    
+    .custom-scrollbar::-webkit-scrollbar { width: 12px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: #333; border: 2px solid #555; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #8b8b8b; border: 2px solid #ffffff; }
+    
+    .bubble {
+        position: relative;
+        background: #ffffff;
+        border: 4px solid #000000;
+        padding: 4px 8px;
+        color: #000;
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 10px;
+        box-shadow: 4px 4px 0px 0px rgba(0,0,0,0.5);
+    }
+    .bubble:after {
+        content: '';
+        position: absolute;
+        bottom: -12px;
+        left: 10px;
+        border-width: 8px 8px 0;
+        border-style: solid;
+        border-color: #000 transparent;
+    }
+</style>
 </head>
-<body class="bg-slate-50 text-slate-900 min-h-screen">
+<body class="bg-[#1a1a1a] text-slate-100 min-h-screen">
     <div id="root"></div>
 </body>
 </html>
